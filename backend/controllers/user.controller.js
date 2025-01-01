@@ -1,5 +1,4 @@
-import userModel from "../models/user.model";
-import * as userService from "../services/user.service";
+import * as userService from "../services/user.service.js";
 import { validationResult } from "express-validator";
 
 export const createUserController = async (req, res) => {
