@@ -1,25 +1,23 @@
+import userModel from "../models/user.model.js";
 import * as userService from "../services/user.service.js";
 import { validationResult } from "express-validator";
 
 export const createUserController = async (req, res) => {
-  // Validate the request body
   const errors = validationResult(req);
+
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
   }
-
   try {
-    // Call the service to create a user
     const user = await userService.createUser(req.body);
 
-    // Generate a token
-    const token = await user.generateToken();
+    const token = await user.generateJWT();
 
-    // Return the user and token in the response
-    return res.status(201).json({ user, token });
+    delete user._doc.password;
+
+    res.status(201).json({ user, token });
   } catch (error) {
-    console.error("Error in createUserController:", error);
-    return res.status(500).json({ error: error.message });
+    res.status(400).send(error.message);
   }
 };
 
@@ -32,22 +30,31 @@ export const loginController = async (req, res) => {
 
   try {
     const { email, password } = req.body;
-    const user = await userModel.findOne({ email });
+
+    const user = await userModel.findOne({ email }).select("+password");
+
     if (!user) {
-      return res.status(401).json({ error: "Invalid email or password" });
+      return res.status(401).json({
+        errors: "Invalid credentials",
+      });
     }
 
-    const isValid = await user.isValidPassword(password);
+    const isMatch = await user.isValidPassword(password);
 
-    if (!isValid) {
-      return res.status(401).json({ error: "Invalid email or password" });
+    if (!isMatch) {
+      return res.status(401).json({
+        errors: "Invalid credentials",
+      });
     }
 
-    const token = await user.generateToken();
+    const token = await user.generateJWT();
+
+    delete user._doc.password;
 
     res.status(200).json({ user, token });
-  } catch (error) {
-    console.error("Error in loginController:", error);
-    return res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.log(err);
+
+    res.status(400).send(err.message);
   }
 };
