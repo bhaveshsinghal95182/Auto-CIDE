@@ -1,15 +1,37 @@
-
-import { Link } from 'react-router-dom';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from '../config/axios';
 
 const Login = () => {
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const navigate = useNavigate()
+
+  function handleSubmit(e) {
+
+    e.preventDefault()
+
+    axios.post('/login', {
+      email, password
+    }).then((res) => {
+      console.log(res.data)
+      navigate('/')
+    }).catch((err) => {
+      console.log(err.response.data)
+    })
+  }
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-900 text-white">
       <div className="w-full max-w-md p-8 space-y-6 bg-gray-800 rounded-lg shadow-md">
         <h2 className="text-2xl font-bold text-center">Login</h2>
-        <form className="space-y-4" method='POST'>
+        <form className="space-y-4" method='POST' onSubmit={handleSubmit}>
           <div className="flex flex-col">
             <label htmlFor="email" className="mb-2">Email:</label>
             <input 
+            onChange={(e) => setEmail(e.target.value)}
               type="email" 
               id="email" 
               name="email" 
@@ -20,6 +42,7 @@ const Login = () => {
           <div className="flex flex-col">
             <label htmlFor="password" className="mb-2">Password:</label>
             <input 
+            onChange={(e) => setPassword(e.target.value)}
               type="password" 
               id="password" 
               name="password" 
