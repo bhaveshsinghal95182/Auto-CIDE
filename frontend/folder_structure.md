@@ -1,0 +1,33 @@
+```
+└── 📁frontend
+    └── 📁public
+        └── vite.svg
+    └── 📁src
+        └── App.jsx
+        └── 📁assets
+            └── react.svg
+        └── 📁config
+            └── axios.js
+        └── 📁context
+            └── user.context.jsx
+        └── 📁hooks
+            └── useUser.js
+        └── index.css
+        └── main.jsx
+        └── 📁routes
+            └── AppRoutes.jsx
+        └── 📁screens
+            └── home.jsx
+            └── login.jsx
+            └── register.jsx
+    └── .env
+    └── .gitignore
+    └── eslint.config.js
+    └── index.html
+    └── package.json
+    └── pnpm-lock.yaml
+    └── postcss.config.js
+    └── README.md
+    └── tailwind.config.js
+    └── vite.config.js
+```

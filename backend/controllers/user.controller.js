@@ -33,15 +33,17 @@ export const loginController = async (req, res) => {
     const { email, password } = req.body;
 
     const user = await userModel.findOne({ email }).select("+password");
-
+    
     if (!user) {
       return res.status(401).json({
         errors: "Invalid credentials",
       });
     }
-
+    
     const isMatch = await user.isValidPassword(password);
-
+    
+    delete user._doc.password;
+    
     if (!isMatch) {
       return res.status(401).json({
         errors: "Invalid credentials",
