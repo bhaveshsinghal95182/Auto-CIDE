@@ -80,3 +80,21 @@ export const logoutController = async (req, res) => {
     res.status(400).send(err.message);
   }
 };
+
+export const allUsersController = async (req, res) => {
+  try {
+    const loggedInUser = await userModel.findOne({
+      email: req.user.email,
+    });
+
+    if (!loggedInUser) {
+      return res.status(404).send("User not found");
+    }
+
+    const allUsers = await userService.getAllUsers(loggedInUser._id);
+    res.status(200).json(allUsers);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Internal Server Error");
+  }
+};
