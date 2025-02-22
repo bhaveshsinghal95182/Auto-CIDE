@@ -30,9 +30,9 @@ export const getAllProjects = async (req, res) => {
       email: req.user.email,
     });
 
-    const allUserProjects = await projectService.getAllProjectsByUserID({
-      userId: loggedInUser._id,
-    });
+    const allUserProjects = await projectService.getAllProjectsByUserID(
+      loggedInUser._id
+    );
 
     return res.status(200).json({
       projects: allUserProjects,
