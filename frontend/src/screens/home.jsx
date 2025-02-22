@@ -1,11 +1,21 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useState, useEffect } from "react";
 import UserContext from "../context/user.context";
 import axios from "../config/axios";
+import { useNavigate } from "react-router-dom";
 
 const Home = () => {
   const user = useContext(UserContext);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [projectName, setProjectName] = useState("");
+  const [project, setProject] = useState([]);
+
+  useEffect(() => {
+    axios.get("/projects/all").then((res) => {
+      console.log(res.data.projects);
+      setProject(res.data.projects);
+    })
+      .catch((err) => console.log(err));
+  }, []);
 
   function handleModalOpen() {
     setIsModalOpen(true);
@@ -24,9 +34,11 @@ const Home = () => {
     setProjectName("");
   }
 
+  const navigate = useNavigate();
+
   return (
     <main className="p-4">
-      <div className="projects">
+      <div className="projects flex flex-wrap gap-4">
         <button
           onClick={handleModalOpen}
           className="project p-4 border border-slate-300 rounded-md"
@@ -34,6 +46,19 @@ const Home = () => {
           New Project
           <i className="ri-link ml-2"></i>
         </button>
+
+        {project.map((project) => (
+          <div key={project._id}
+            onClick={() => navigate(`/project`, { state: project })}
+            className="project p-4 border border-slate-300 flex flex-col gap-2 rounded-md cursor-pointer hover:bg-slate-100 min-w-[200px]"
+          >
+            <h2 className="text-lg font-semibold">{project.name}</h2>
+            <div className="flex justify-between items-center gap-2">
+              <i className="ri-user-fill"></i>
+              <p className="text-sm text-gray-500">{project.users.length} members</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Modal */}
