@@ -1,25 +1,53 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
+import axios from "../config/axios";
 
 const Project = () => {
   const location = useLocation();
-  console.log(location.state);
   const [sidePanel, setSidePanel] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState([]);
-  const users = [
-    { id: 1, name: "User One", email: "userone@gmail.com" },
-    { id: 2, name: "User Two", email: "usertwo@gmail.com" },
-    { id: 3, name: "User Three", email: "userthree@gmail.com" },
-    { id: 4, name: "User Four", email: "userfour@gmail.com" },
-    { id: 5, name: "User Five", email: "userfive@gmail.com" },
-    { id: 6, name: "User Six", email: "usersix@gmail.com" },
-    { id: 7, name: "User Seven", email: "userseven@gmail.com" },
-    { id: 8, name: "User Eight", email: "usereight@gmail.com" },
-  ];
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    axios.get("/users/all")
+    .then((res) => {
+      if (Array.isArray(res.data)) {
+        setUsers(res.data);
+      } else {
+        console.error("Unexpected data format:", res.data);
+        setUsers([]);
+      }
+    })
+    .catch((err) => {
+      console.error("API Error:", err);
+      setUsers([]);
+    });
+  }, []);
 
   const handleUserClick = (id) => {
-    setSelectedUserId([...selectedUserId, id]);
+    setSelectedUserId((prevIds) =>
+      prevIds.includes(id) ? prevIds.filter((uid) => uid !== id) : [...prevIds, id]
+    );
+  };
+  
+  // console log the selected users
+  // useEffect(() => {
+  //   console.log("Updated selected users:", selectedUserId);
+  // }, [selectedUserId]);
+
+  const addCollaborators = () => {
+    axios.put("/projects/add-user", {
+      projectId: location.state._id,
+      users: selectedUserId,
+    })
+    .then((res) => {
+      console.log(res);
+      setIsModalOpen(false);
+    })
+    .catch((err) => {
+      console.log(err);
+    });
   };
 
   return (
@@ -36,7 +64,7 @@ const Project = () => {
           </button>
           <button
             className="text-2xl font-bold"
-            onClick={() => setSidePanel(!sidePanel)}
+            onClick={() => setSidePanel(true)}
           >
             <i className="ri-group-fill"></i>
           </button>
@@ -68,9 +96,10 @@ const Project = () => {
 
         {/* Side Panel */}
         <div
-          className={`side-panel w-full h-full bg-slate-300 flex flex-col transition-all duration-3000 absolute top-0 left-[-100%] ${
-            sidePanel ? "left-0" : ""
+          className={`side-panel w-full h-full bg-slate-300 flex flex-col transition-all duration-300 absolute ${
+            sidePanel ? "left-0" : "-left-full"
           }`}
+          
         >
           <header className="flex items-center justify-between p-4 w-full bg-slate-200">
             <h1 className="text-2xl font-bold">Project Details</h1>
@@ -109,24 +138,30 @@ const Project = () => {
               </button>
             </header>
             <div className="users-list flex flex-col gap-2 mb-16 max-h-96 overflow-auto">
-              {users.map((user) => (
-                <div
-                  key={user.id}
-                  className={`user cursor-pointer hover:bg-slate-200 ${
-                    Array.from(selectedUserId).indexOf(user._id) != -1
-                      ? "bg-slate-200"
-                      : ""
-                  } p-2 flex gap-2 items-center`}
-                  onClick={() => handleUserClick(user._id)}
-                >
-                  <div className="aspect-square relative rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600">
-                    <i className="ri-user-fill absolute"></i>
+              {users && Array.isArray(users) && users.length > 0 ? (
+                users.map((user) => (
+                  <div
+                    key={user._id}
+                    className={`user cursor-pointer hover:bg-slate-200 ${
+                      Array.from(selectedUserId).indexOf(user._id) !== -1
+                        ? "bg-slate-200"
+                        : ""
+                    } p-2 flex gap-2 items-center`}
+                    onClick={() => handleUserClick(user._id)}
+                  >
+                    <div className="aspect-square relative rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600">
+                      <i className="ri-user-fill absolute"></i>
+                    </div>
+                    <h1 className="font-semibold text-lg">{user.email}</h1>
                   </div>
-                  <h1 className="font-semibold text-lg">{user.email}</h1>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="text-center text-gray-500">
+                  No users found or loading...
+                </p>
+              )}
             </div>
-            <button className="bg-slate-600 text-white p-2 rounded-md">
+            <button className="bg-slate-600 text-white p-2 rounded-md" onClick={addCollaborators}>
               Add Collaborators
             </button>
           </div>
