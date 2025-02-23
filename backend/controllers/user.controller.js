@@ -91,7 +91,7 @@ export const allUsersController = async (req, res) => {
       return res.status(404).send("User not found");
     }
 
-    const allUsers = await userService.getAllUsers(loggedInUser._id);
+    const allUsers = await userService.getAllUser(loggedInUser._id);
     res.status(200).json(allUsers);
   } catch (err) {
     console.error(err);
