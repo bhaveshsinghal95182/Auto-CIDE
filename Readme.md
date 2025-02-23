@@ -910,7 +910,135 @@ Again with the steps,
 2. controller
 3. service
 
-`product.route.js`
+`project.route.js`
 ```js
+router.get(
+  "/get-project/:projectId",
+  authMiddleWare.authUser,
+  projectController.getProjectById
+)
+```
 
+`project.controller.js`
+```js
+export const getProjectById = async (req, res) => {
+  const { projectId } = req.params;
+  try {
+    const project = await projectService.getProjectById(projectId);
+    return res.status(200).json({ project });
+  } catch (err) {
+    console.log(err);
+    res.status(400).send(err.message);
+  }
+};
+```
+
+`project.service.js`
+```js
+export const getProjectById = async (projectId) => {
+  if (!projectId) {
+    throw new Error("Project ID is required");
+  }
+  if (!mongoose.Types.ObjectId.isValid(projectId)) {
+    throw new Error("Project ID must be a valid mongoose ID");
+  }
+  const project = await projectModel.findOne({
+    _id: projectId,
+  }).populate("users");
+
+  return project;
+}
+```
+We are just going to find out the users. First find the particular project then create an object of all users and product id, and return it.
+
+Note: After this i encountered an error while making a call from frontend to backend. That was because the get all projects controller was sending an object to the service, but that was not how it should have send the data, it just needed the id and i figured that out using chatgpt.
+
+
+# Creating UI for Projects 
+First of all add the project component to App Router, so that each request at /projects is sent to that route. 
+
+`AppRoutes.jsx`
+```jsx
+<Route path="/project" element={<Project />} />
+```
+
+`screen/Project.jsx`
+```jsx
+import React, { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+
+const Project = () => {
+  const location = useLocation();
+  console.log(location.state);
+  const [sidePanel, setSidePanel] = useState(false);
+
+  return (
+    <main className="h-screen w-screen flex">
+      <section className="left relative flex flex-col h-full w-1/5 bg-slate-700">
+        {/* Project Header */}
+        <header className="flex items-center justify-between p-4 w-full bg-slate-200">
+          <h1 className="text-2xl font-bold">{location.state.name}</h1>
+          <button
+            className="text-2xl font-bold"
+            onClick={() => setSidePanel(!sidePanel)}
+          >
+            <i className="ri-group-fill"></i>
+          </button>
+        </header>
+
+        {/* Conversation Area */}
+        <div className="conversation-area flex-grow overflow-y-auto flex flex-col">
+          <div className="message-box flex-grow overflow-y-auto p-2">
+            <div className="incoming flex flex-col p-2 bg-slate-50 w-fit rounded-xl">
+              <small className="opacity-65 text-xs">example@gmail.com</small>
+              <p className="p-2">Lorem ipsum dolor sit amet.</p>
+            </div>
+            <div className="outgoing ml-auto flex flex-col p-2 bg-slate-50 w-fit rounded-xl">
+              <small className="opacity-65 text-xs">example@gmail.com</small>
+              <p className="p-2">Lorem ipsum dolor sit amet.</p>
+            </div>
+          </div>
+          <div className="input-field w-full flex items-center justify-between bg-white p-2">
+            <input
+              type="text"
+              placeholder="Type a message..."
+              className="px-4 p-2 rounded-full outline-none bg-white w-full mr-2"
+            />
+            <button className="send-button bg-[#25D366] text-white p-2 px-4 rounded-[1vw] hover:bg-[#128C7E]">
+              <i className="ri-send-plane-fill"></i>
+            </button>
+          </div>
+        </div>
+
+        {/* Side Panel */}
+        <div
+          className={`side-panel w-full h-full bg-slate-300 flex flex-col transition-all duration-3000 absolute top-0 left-[-100%] ${
+            sidePanel ? "left-0" : ""
+          }`}
+        >
+          <header className="flex items-center justify-between p-4 w-full bg-slate-200">
+            <h1 className="text-2xl font-bold">Project Details</h1>
+            <button
+              className="text-2xl font-bold"
+              onClick={() => setSidePanel(!sidePanel)}
+            >
+              <i className="ri-close-fill"></i>
+            </button>
+          </header>
+
+          <div className="users flex flex-col gap-2">
+            <div className="user flex items-center gap-2 cursor-pointer hover:bg-slate-400 p-2 rounded-xl">
+              <div className="aspect-square rounded-full p-2 bg-slate-400">
+                <i className="ri-user-fill "></i>
+              </div>
+              <h1 className="font-semibold text-lg font-sans">username</h1>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+};
+
+export default Project;
 ```

@@ -18,6 +18,10 @@ const Project = () => {
     { id: 8, name: "User Eight", email: "usereight@gmail.com" },
   ];
 
+  const handleUserClick = (id) => {
+    setSelectedUserId([...selectedUserId, id]);
+  };
+
   return (
     <main className="h-screen w-screen flex">
       <section className="left relative flex flex-col h-full w-1/5 bg-slate-700">
