@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "../config/axios";
+import { initializeSocket, receiveMessage, sendMessage } from "../config/socket";
 
 const Project = () => {
   const location = useLocation();
@@ -46,6 +47,8 @@ const Project = () => {
         console.error("API Error:", err.response?.data || err.message);
         setUsers([]);
       });
+
+    initializeSocket(localStorage.getItem('token'));
   }, []);
 
   const handleUserClick = (id) => {

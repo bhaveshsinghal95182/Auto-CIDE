@@ -72,6 +72,13 @@ export const getProjectById = async (req, res) => {
   const { projectId } = req.params;
   try {
     const project = await projectService.getProjectById(projectId);
+
+    // Check if the user is part of the project
+    const loggedInUser = await userModel.findOne({ email: req.user.email });
+    if (!project.users.some(user => user.equals(loggedInUser._id))) {
+      return res.status(403).send("You do not have access to this project.");
+    }
+
     return res.status(200).json({ project });
   } catch (err) {
     console.log(err);
