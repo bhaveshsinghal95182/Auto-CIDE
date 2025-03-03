@@ -4,50 +4,65 @@ import axios from "../config/axios";
 
 const Project = () => {
   const location = useLocation();
+  const [users, setUsers] = useState([]);
   const [sidePanel, setSidePanel] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState([]);
-  const [users, setUsers] = useState([]);
+  const [project, setProject] = useState(null);
 
   useEffect(() => {
-    axios.get("/users/all")
-    .then((res) => {
-      if (Array.isArray(res.data)) {
-        setUsers(res.data);
-      } else {
-        console.error("Unexpected data format:", res.data);
+    axios
+      .get(`/projects/get-project/${location.state._id}`)
+      .then((res) => {
+        console.log(res.data);
+        setProject(res.data);
+      })
+      .catch((err) => {
+        console.log(err);
+      });
+
+    axios
+      .get("/users/all")
+      .then((res) => {
+        if (Array.isArray(res.data)) {
+          setUsers(res.data);
+        } else {
+          console.error("Unexpected data format:", res.data);
+          setUsers([]);
+        }
+      })
+      .catch((err) => {
+        console.error("API Error:", err);
         setUsers([]);
-      }
-    })
-    .catch((err) => {
-      console.error("API Error:", err);
-      setUsers([]);
-    });
+      });
   }, []);
 
   const handleUserClick = (id) => {
     setSelectedUserId((prevIds) =>
-      prevIds.includes(id) ? prevIds.filter((uid) => uid !== id) : [...prevIds, id]
+      prevIds.includes(id)
+        ? prevIds.filter((uid) => uid !== id)
+        : [...prevIds, id]
     );
   };
-  
+
   // console log the selected users
   // useEffect(() => {
   //   console.log("Updated selected users:", selectedUserId);
   // }, [selectedUserId]);
 
   const addCollaborators = () => {
-    axios.put("/projects/add-user", {
-      projectId: location.state._id,
-      users: selectedUserId,
-    })
-    .then((res) => {
-      console.log(res);
-      setIsModalOpen(false);
-    })
-    .catch((err) => {
-      console.log(err);
-    });
+    axios
+      .put("/projects/add-user", {
+        projectId: location.state._id,
+        users: selectedUserId,
+      })
+      .then((res) => {
+        console.log(res);
+        setIsModalOpen(false);
+      })
+      .catch((err) => {
+        console.log(err);
+      });
   };
 
   return (
@@ -99,7 +114,6 @@ const Project = () => {
           className={`side-panel w-full h-full bg-slate-300 flex flex-col transition-all duration-300 absolute ${
             sidePanel ? "left-0" : "-left-full"
           }`}
-          
         >
           <header className="flex items-center justify-between p-4 w-full bg-slate-200">
             <h1 className="text-2xl font-bold">Project Details</h1>
@@ -112,12 +126,19 @@ const Project = () => {
           </header>
 
           <div className="users flex flex-col gap-2">
-            <div className="user flex items-center gap-2 cursor-pointer hover:bg-slate-400 p-2 rounded-xl">
-              <div className="aspect-square rounded-full p-2 bg-slate-400">
-                <i className="ri-user-fill "></i>
+            {project?.users?.map((user) => (
+              <div
+                key={user._id}
+                className="user flex items-center gap-2 cursor-pointer hover:bg-slate-400 p-2 rounded-xl"
+              >
+                <div className="aspect-square rounded-full p-2 bg-slate-400">
+                  <i className="ri-user-fill "></i>
+                </div>
+                <h1 className="font-semibold text-lg font-sans">
+                  {user.email || "No email"}
+                </h1>
               </div>
-              <h1 className="font-semibold text-lg font-sans">username</h1>
-            </div>
+            ))}
           </div>
         </div>
       </section>
@@ -138,14 +159,12 @@ const Project = () => {
               </button>
             </header>
             <div className="users-list flex flex-col gap-2 mb-16 max-h-96 overflow-auto">
-              {users && Array.isArray(users) && users.length > 0 ? (
+              {Array.isArray(users) && users.length > 0 ? (
                 users.map((user) => (
                   <div
                     key={user._id}
                     className={`user cursor-pointer hover:bg-slate-200 ${
-                      Array.from(selectedUserId).indexOf(user._id) !== -1
-                        ? "bg-slate-200"
-                        : ""
+                      selectedUserId.includes(user._id) ? "bg-slate-200" : ""
                     } p-2 flex gap-2 items-center`}
                     onClick={() => handleUserClick(user._id)}
                   >
@@ -161,7 +180,10 @@ const Project = () => {
                 </p>
               )}
             </div>
-            <button className="bg-slate-600 text-white p-2 rounded-md" onClick={addCollaborators}>
+            <button
+              className="bg-slate-600 text-white p-2 rounded-md"
+              onClick={addCollaborators}
+            >
               Add Collaborators
             </button>
           </div>
