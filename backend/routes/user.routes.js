@@ -35,6 +35,6 @@ router.get(
   "/all",
   authMiddleware.authUser,
   userController.allUsersController
-)
+);
 
 export default router;

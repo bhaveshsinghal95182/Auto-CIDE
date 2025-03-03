@@ -20,4 +20,4 @@ export const getAllUser = async (userId) => {
     _id: { $ne: userId },
   });
   return users;
-}
+};

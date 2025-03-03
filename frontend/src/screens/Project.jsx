@@ -9,30 +9,41 @@ const Project = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState([]);
   const [project, setProject] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
-    axios
-      .get(`/projects/get-project/${location.state._id}`)
-      .then((res) => {
-        console.log(res.data);
-        setProject(res.data);
+    // Get current user info
+    axios.get('/users/profile')
+      .then(res => {
+        setCurrentUser(res.data.user);
       })
-      .catch((err) => {
-        console.log(err);
+      .catch(err => {
+        console.error('Error fetching current user:', err);
       });
 
-    axios
-      .get("/users/all")
+    // Existing project fetch
+    axios.get(`/projects/get-project/${location.state._id}`)
       .then((res) => {
-        if (Array.isArray(res.data)) {
+        setProject(res.data.project);
+      })
+      .catch((err) => {
+        console.error('Error fetching project:', err);
+      });
+
+    // Existing users fetch
+    axios.get("/users/all")
+      .then((res) => {
+        if (res.data && Array.isArray(res.data)) {
           setUsers(res.data);
+        } else if (res.data && Array.isArray(res.data.users)) {
+          setUsers(res.data.users);
         } else {
           console.error("Unexpected data format:", res.data);
           setUsers([]);
         }
       })
       .catch((err) => {
-        console.error("API Error:", err);
+        console.error("API Error:", err.response?.data || err.message);
         setUsers([]);
       });
   }, []);
@@ -45,23 +56,17 @@ const Project = () => {
     );
   };
 
-  // console log the selected users
-  // useEffect(() => {
-  //   console.log("Updated selected users:", selectedUserId);
-  // }, [selectedUserId]);
-
   const addCollaborators = () => {
     axios
       .put("/projects/add-user", {
         projectId: location.state._id,
         users: selectedUserId,
       })
-      .then((res) => {
-        console.log(res);
+      .then(() => {
         setIsModalOpen(false);
       })
       .catch((err) => {
-        console.log(err);
+        console.error("Error adding collaborators:", err);
       });
   };
 
@@ -126,13 +131,13 @@ const Project = () => {
           </header>
 
           <div className="users flex flex-col gap-2">
-            {project?.users?.map((user) => (
+            {project?.users?.filter(user => user.email !== currentUser?.email).map((user) => (
               <div
                 key={user._id}
                 className="user flex items-center gap-2 cursor-pointer hover:bg-slate-400 p-2 rounded-xl"
               >
                 <div className="aspect-square rounded-full p-2 bg-slate-400">
-                  <i className="ri-user-fill "></i>
+                  <i className="ri-user-fill"></i>
                 </div>
                 <h1 className="font-semibold text-lg font-sans">
                   {user.email || "No email"}
