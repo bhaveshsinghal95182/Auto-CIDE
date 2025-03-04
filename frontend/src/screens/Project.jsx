@@ -1,29 +1,54 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "../config/axios";
-import { initializeSocket, receiveMessage, sendMessage } from "../config/socket";
+import { initializeSocket, receiveMessage, sendMessage, socketInstance } from "../config/socket";
+import UserContext from "../context/user.context";
 
 const Project = () => {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useContext(UserContext);
   const [users, setUsers] = useState([]);
   const [sidePanel, setSidePanel] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState([]);
   const [project, setProject] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
+  const [projectId, setProjectId] = useState(location.state._id);
+  const [message, setMessage] = useState('');
 
+  // First useEffect to handle user authentication
   useEffect(() => {
-    // Get current user info
-    axios.get('/users/profile')
-      .then(res => {
-        setCurrentUser(res.data.user);
-      })
-      .catch(err => {
-        console.error('Error fetching current user:', err);
-      });
+    console.log('User from context:', user);
+    if (!user) {
+      console.log('No user in context, checking token...');
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.log('No token found, redirecting to login...');
+        navigate('/login');
+      }
+    }
+  }, [user, navigate]);
+
+  // Second useEffect to handle data fetching and socket initialization
+  useEffect(() => {
+    if (!user) {
+      console.log('Waiting for user context...');
+      return; // Don't proceed if no user
+    }
+
+    console.log('Initializing with user:', user);
+    const token = localStorage.getItem('token');
+    if (!token) {
+      navigate('/login');
+      return;
+    }
+
+    // Initialize socket with projectId
+    console.log('Initializing socket connection...');
+    initializeSocket(projectId);
 
     // Existing project fetch
-    axios.get(`/projects/get-project/${location.state._id}`)
+    axios.get(`/projects/get-project/${projectId}`)
       .then((res) => {
         setProject(res.data.project);
       })
@@ -48,8 +73,18 @@ const Project = () => {
         setUsers([]);
       });
 
-    initializeSocket(localStorage.getItem('token'));
-  }, []);
+    receiveMessage('project-message', (message) => {
+      console.log('Received message:', message);
+    });
+
+    // Cleanup socket connection on unmount
+    return () => {
+      console.log('Cleaning up socket connection...');
+      if (socketInstance) {
+        socketInstance.disconnect();
+      }
+    };
+  }, [projectId, user, navigate]);
 
   const handleUserClick = (id) => {
     setSelectedUserId((prevIds) =>
@@ -62,7 +97,7 @@ const Project = () => {
   const addCollaborators = () => {
     axios
       .put("/projects/add-user", {
-        projectId: location.state._id,
+        projectId: projectId,
         users: selectedUserId,
       })
       .then(() => {
@@ -72,6 +107,37 @@ const Project = () => {
         console.error("Error adding collaborators:", err);
       });
   };
+
+  const sendSomeMessage = (message) => {
+    if (!user) {
+      console.error("User is not logged in.");
+      return;
+    }
+
+    if (!user._id) {
+      console.error("User ID is not available:", user);
+      return;
+    }
+
+    sendMessage('project-message', {
+      message: message,
+      sender: user._id,
+      projectId: projectId,
+    });
+
+    console.log('Message sent:', {
+      message: message,
+      sender: user._id,
+      projectId: projectId,
+    });
+
+    setMessage('');
+  }
+
+  // Show loading state if no user
+  if (!user) {
+    return <div>Loading user data...</div>;
+  }
 
   return (
     <main className="h-screen w-screen flex">
@@ -109,9 +175,11 @@ const Project = () => {
             <input
               type="text"
               placeholder="Type a message..."
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
               className="px-4 p-2 rounded-full outline-none bg-white w-full mr-2"
             />
-            <button className="send-button bg-[#25D366] text-white p-2 px-4 rounded-[1vw] hover:bg-[#128C7E]">
+            <button onClick={() => sendSomeMessage(message)} className="send-button bg-[#25D366] text-white p-2 px-4 rounded-[1vw] hover:bg-[#128C7E]">
               <i className="ri-send-plane-fill"></i>
             </button>
           </div>
@@ -134,7 +202,7 @@ const Project = () => {
           </header>
 
           <div className="users flex flex-col gap-2">
-            {project?.users?.filter(user => user.email !== currentUser?.email).map((user) => (
+            {project?.users?.filter(user => user.email !== user?.email).map((user) => (
               <div
                 key={user._id}
                 className="user flex items-center gap-2 cursor-pointer hover:bg-slate-400 p-2 rounded-xl"
