@@ -21,7 +21,8 @@ const Register = () => {
         password,
       })
       .then((res) => {
-        localStorage.setItem("token", res.data.token);
+        const token = res.data.token;
+        localStorage.setItem("token", token);
         setUser(res.data.user);
         navigate("/");
       })

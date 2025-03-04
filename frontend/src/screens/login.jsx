@@ -20,8 +20,8 @@ const Login = () => {
     axios
       .post("/users/login", { email, password })
       .then((res) => {
-        console.log("API Response:", res.data); // Debug response structure
-        localStorage.setItem("token", res.data.token);
+        const token = res.data.token;
+        localStorage.setItem("token", token);
         setUser(res.data.user);
         navigate("/");
       })
