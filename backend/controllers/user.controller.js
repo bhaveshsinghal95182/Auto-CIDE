@@ -57,15 +57,26 @@ export const loginController = async (req, res) => {
     res.status(200).json({ user, token });
   } catch (err) {
     console.log(err);
-
     res.status(400).send(err.message);
   }
 };
 
 export const profileController = async (req, res) => {
-  res.status(200).json({
-    user: req.user,
-  });
+  try {
+    const user = await userModel.findOne({ email: req.user.email });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+    res.status(200).json({
+      user: {
+        email: user.email,
+        _id: user._id
+      }
+    });
+  } catch (err) {
+    console.error('Profile error:', err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 };
 
 export const logoutController = async (req, res) => {

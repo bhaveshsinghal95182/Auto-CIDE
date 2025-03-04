@@ -23,7 +23,7 @@ const Register = () => {
       .then((res) => {
         const token = res.data.token;
         localStorage.setItem("token", token);
-        setUser(res.data.user);
+        setUser({ _id: res.data.user._id, email: res.data.user.email });
         navigate("/");
       })
       .catch((err) => {
