@@ -140,6 +140,7 @@ const Project = () => {
   }
 
   function appendIncomingMessage(message) {
+    scrollToBottom();
     const messageBox = document.querySelector(".message-box");
     const messageElement = document.createElement("div");
     messageElement.classList.add("incoming");
@@ -159,6 +160,14 @@ const Project = () => {
     <p class="p-2">${message.message}</p>
     </div>`;
     messageBox.appendChild(messageElement);
+    scrollToBottom();
+  }
+
+  function scrollToBottom() {
+    const messageBox = document.querySelector(".message-box");
+    if (messageBox) {
+      messageBox.scrollTop = messageBox.scrollHeight;
+    }
   }
 
   return (
@@ -187,9 +196,8 @@ const Project = () => {
           <div
             ref={messageBox}
             className="message-box flex-grow overflow-y-auto p-2 scrollbar-hide"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-          </div>
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          ></div>
           <div className="input-field w-full flex items-center justify-between bg-white p-2">
             <textarea
               placeholder="Type a message..."
@@ -203,19 +211,19 @@ const Project = () => {
                     e.preventDefault();
                     sendSomeMessage(message);
                     // Reset textarea height
-                    e.target.style.height = '40px';
+                    e.target.style.height = "40px";
                   }
                 }
               }}
               className="px-4 p-2 rounded-xl outline-none bg-white w-full mr-2 resize-none overflow-hidden"
               style={{
                 minHeight: "40px",
-                height: "40px"
+                height: "40px",
               }}
               rows={1}
               onInput={(e) => {
-                e.target.style.height = '40px';
-                e.target.style.height = e.target.scrollHeight + 'px';
+                e.target.style.height = "40px";
+                e.target.style.height = e.target.scrollHeight + "px";
               }}
             />
             <button
@@ -223,8 +231,8 @@ const Project = () => {
                 if (message.trim()) {
                   sendSomeMessage(message);
                   // Reset textarea height when sending via button
-                  const textarea = document.querySelector('textarea');
-                  if (textarea) textarea.style.height = '40px';
+                  const textarea = document.querySelector("textarea");
+                  if (textarea) textarea.style.height = "40px";
                 }
               }}
               className="send-button bg-[#25D366] text-white p-2 px-4 rounded-[1vw] hover:bg-[#128C7E]"
@@ -286,22 +294,24 @@ const Project = () => {
               </button>
             </header>
             <div className="users-list flex flex-col gap-2 mb-16 max-h-96 overflow-auto">
-              {console.log('Current users:', users)}
+              {console.log("Current users:", users)}
               {Array.isArray(users) && users.length > 0 ? (
-                users.filter(u => u._id !== user?._id).map((user) => (
-                  <div
-                    key={user._id}
-                    className={`user cursor-pointer hover:bg-slate-200 ${
-                      selectedUserId.includes(user._id) ? "bg-slate-200" : ""
-                    } p-2 flex gap-2 items-center`}
-                    onClick={() => handleUserClick(user._id)}
-                  >
-                    <div className="aspect-square relative rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600">
-                      <i className="ri-user-fill absolute"></i>
+                users
+                  .filter((u) => u._id !== user?._id)
+                  .map((user) => (
+                    <div
+                      key={user._id}
+                      className={`user cursor-pointer hover:bg-slate-200 ${
+                        selectedUserId.includes(user._id) ? "bg-slate-200" : ""
+                      } p-2 flex gap-2 items-center`}
+                      onClick={() => handleUserClick(user._id)}
+                    >
+                      <div className="aspect-square relative rounded-full w-fit h-fit flex items-center justify-center p-5 text-white bg-slate-600">
+                        <i className="ri-user-fill absolute"></i>
+                      </div>
+                      <h1 className="font-semibold text-lg">{user.email}</h1>
                     </div>
-                    <h1 className="font-semibold text-lg">{user.email}</h1>
-                  </div>
-                ))
+                  ))
               ) : (
                 <p className="text-center text-gray-500">
                   No users found or loading... ({users?.length || 0} users)
