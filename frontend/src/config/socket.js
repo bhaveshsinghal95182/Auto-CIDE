@@ -15,12 +15,12 @@ export const initializeSocket = (projectId) => {
   });
 
   // Log connection status
-  socketInstance.on('connect', () => {
-    console.log('Socket connected successfully');
+  socketInstance.on("connect", () => {
+    // console.log("Socket connected successfully");
   });
 
-  socketInstance.on('connect_error', (error) => {
-    console.error('Socket connection error:', error.message);
+  socketInstance.on("connect_error", (error) => {
+    console.error("Socket connection error:", error.message);
   });
 
   return socketInstance;

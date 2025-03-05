@@ -38,7 +38,7 @@ io.use(async (socket, next) => {
     socket.user = decoded;
     next();
   } catch (error) {
-    console.error('Socket authentication error:', error.message);
+    console.error("Socket authentication error:", error.message);
     next(error);
   }
 });
@@ -50,7 +50,7 @@ io.on("connection", (socket) => {
   socket.join(socket.roomId);
 
   socket.on("project-message", async (data) => {
-    io.to(socket.roomId).emit("project-message", data);
+    socket.broadcast.to(socket.roomId).emit("project-message", data);
   });
 });
 
