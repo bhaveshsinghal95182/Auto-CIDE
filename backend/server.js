@@ -5,6 +5,7 @@ import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import projectModel from "./models/project.model.js";
+import { generateResult } from "./services/ai.service.js";
 
 const port = process.env.PORT || 5000;
 
@@ -43,14 +44,33 @@ io.use(async (socket, next) => {
   }
 });
 
-io.on("connection", (socket) => {
+io.on("connection", async (socket) => {
   console.log("A user connected:", socket.id);
 
   socket.roomId = socket.handshake.query.projectId.toString();
   socket.join(socket.roomId);
 
   socket.on("project-message", async (data) => {
+    const message = data.message;
+    if (message.includes("@ai")) {
+      // Found @ai keyword in message
+
+      const prompt = message.replace("@ai", "");
+      const result = await generateResult(prompt);
+
+      io.to(socket.roomId).emit("project-message", {
+        message: result,
+        sender: "AI",
+        projectId: data.projectId,
+      });
+      return;
+    }
     socket.broadcast.to(socket.roomId).emit("project-message", data);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("A user disconnected:", socket.id);
+    socket.leave(socket.roomId);
   });
 });
 

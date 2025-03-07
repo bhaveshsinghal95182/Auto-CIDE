@@ -8,6 +8,7 @@ import {
   socketInstance,
 } from "../config/socket";
 import UserContext from "../context/user.context";
+import Markdown from "markdown-to-jsx";
 
 const Project = () => {
   const location = useLocation();
@@ -20,7 +21,10 @@ const Project = () => {
   const [project, setProject] = useState(null);
   const [projectId, setProjectId] = useState(location.state._id);
   const [message, setMessage] = useState("");
-  const messageBox = React.createRef();
+  const [messages, setMessages] = useState([]);
+  const messageBoxRef = useRef(null);
+  const [messageBoxWidth, setMessageBoxWidth] = useState(20);
+  const [isResizing, setIsResizing] = useState(false);
 
   // First useEffect to handle user authentication
   useEffect(() => {
@@ -76,7 +80,7 @@ const Project = () => {
       });
 
     receiveMessage("project-message", (message) => {
-      appendIncomingMessage(message);
+      addMessage(message, "incoming");
     });
 
     // Cleanup socket connection on unmount
@@ -86,6 +90,40 @@ const Project = () => {
       }
     };
   }, [projectId, user, navigate]);
+
+  // Add useEffect to scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  // Add useEffect to handle resizing
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      
+      // Calculate new width as percentage of window width
+      const newWidth = (e.clientX / window.innerWidth) * 100;
+      
+      // Limit the width between 15% and 50%
+      if (newWidth >= 15 && newWidth <= 50) {
+        setMessageBoxWidth(newWidth);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
 
   const handleUserClick = (id) => {
     setSelectedUserId((prevIds) =>
@@ -126,53 +164,39 @@ const Project = () => {
       projectId: projectId,
     });
 
-    appendOutgoingMessage({
+    addMessage({
       message: message,
       sender: user.email,
       projectId: projectId,
-    });
+    }, "outgoing");
 
     setMessage("");
   };
+
+  // New function to add messages to state
+  const addMessage = (messageData, type) => {
+    setMessages(prevMessages => [
+      ...prevMessages, 
+      { ...messageData, type }
+    ]);
+  };
+
+  function scrollToBottom() {
+    if (messageBoxRef.current) {
+      messageBoxRef.current.scrollTop = messageBoxRef.current.scrollHeight;
+    }
+  }
 
   if (!user) {
     return <div>Loading user data...</div>;
   }
 
-  function appendIncomingMessage(message) {
-    scrollToBottom();
-    const messageBox = document.querySelector(".message-box");
-    const messageElement = document.createElement("div");
-    messageElement.classList.add("incoming");
-    messageElement.innerHTML = `<div class="incoming flex flex-col p-2 bg-slate-50 w-fit rounded-xl">
-    <small class="opacity-65 text-xs">${message.sender}</small>
-    <p class="p-2">${message.message}</p>
-    </div>`;
-    messageBox.appendChild(messageElement);
-  }
-
-  function appendOutgoingMessage(message) {
-    const messageBox = document.querySelector(".message-box");
-    const messageElement = document.createElement("div");
-    messageElement.classList.add("outgoing");
-    messageElement.innerHTML = `<div class="outgoing flex flex-col p-2 bg-slate-50 w-fit rounded-xl ml-auto">
-    <small class="opacity-65 text-xs">${message.sender}</small>
-    <p class="p-2">${message.message}</p>
-    </div>`;
-    messageBox.appendChild(messageElement);
-    scrollToBottom();
-  }
-
-  function scrollToBottom() {
-    const messageBox = document.querySelector(".message-box");
-    if (messageBox) {
-      messageBox.scrollTop = messageBox.scrollHeight;
-    }
-  }
-
   return (
     <main className="h-screen w-screen flex">
-      <section className="left relative flex flex-col h-full w-1/5 bg-slate-700">
+      <section 
+        className="left relative flex flex-col h-full bg-slate-700"
+        style={{ width: `${messageBoxWidth}%` }}
+      >
         {/* Project Header */}
         <header className="flex items-center justify-between p-4 w-full bg-slate-200">
           <h1 className="text-2xl font-bold">{location.state.name}</h1>
@@ -194,10 +218,32 @@ const Project = () => {
         <div className="conversation-area flex-grow overflow-y-auto flex flex-col">
           {/* Message Box */}
           <div
-            ref={messageBox}
+            ref={messageBoxRef}
             className="message-box flex-grow overflow-y-auto p-2 scrollbar-hide"
             style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
-          ></div>
+          >
+            {messages.map((msg, index) => (
+              <div key={index} className={msg.type}>
+                {msg.type === "incoming" ? (
+                  <div className="incoming flex flex-col p-2 bg-slate-50 w-fit rounded-xl">
+                    <small className="opacity-65 text-xs">{msg.sender}</small>
+                    {msg.sender === "AI" ? (
+                      <div className="p-2 whitespace-pre-wrap break-words">
+                        <Markdown>{msg.message}</Markdown>
+                      </div>
+                    ) : (
+                      <p className="p-2">{msg.message}</p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="outgoing flex flex-col p-2 bg-slate-50 w-fit rounded-xl ml-auto">
+                    <small className="opacity-65 text-xs">{msg.sender}</small>
+                    <p className="p-2">{msg.message}</p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
           <div className="input-field w-full flex items-center justify-between bg-white p-2">
             <textarea
               placeholder="Type a message..."
@@ -276,6 +322,17 @@ const Project = () => {
               ))}
           </div>
         </div>
+      </section>
+
+      {/* Resize Handle */}
+      <div
+        className="resize-handle w-1 h-full bg-gray-300 cursor-col-resize hover:bg-gray-400 active:bg-gray-500"
+        onMouseDown={() => setIsResizing(true)}
+      ></div>
+
+      {/* Content area (can be used for the main project content) */}
+      <section className="right flex-grow h-full bg-white">
+        {/* Content can be added here */}
       </section>
 
       {/* Modal */}
