@@ -8,7 +8,8 @@ import {
   socketInstance,
 } from "../config/socket";
 import UserContext from "../context/user.context";
-import Markdown from "markdown-to-jsx";
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 const Project = () => {
   const location = useLocation();
@@ -187,6 +188,125 @@ const Project = () => {
     }
   }
 
+  // Function to render AI message content
+  const renderAIMessage = (messageContent) => {
+    try {
+      // Try to parse the message as JSON
+      const parsedMessage = JSON.parse(messageContent);
+      
+      // Check if it has the expected structure
+      if (parsedMessage.text && parsedMessage.code?.filetree) {
+        return (
+          <div className="ai-message-container">
+            {/* Text part */}
+            <div className="text-part mb-3">
+              {parsedMessage.text}
+            </div>
+            
+            {/* Code part - for each file in filetree */}
+            {parsedMessage.code.filetree.map((file, fileIndex) => {
+              // Determine language from file extension or language field
+              let language = 'text';
+              
+              // Check if language is specified directly
+              if (file.language) {
+                language = file.language;
+              } else {
+                // Try to determine from filename extension
+                const extension = file.filename.split('.').pop();
+                if (extension) {
+                  // Map common extensions to languages
+                  const extensionMap = {
+                    'js': 'javascript',
+                    'jsx': 'jsx',
+                    'ts': 'typescript',
+                    'tsx': 'tsx',
+                    'py': 'python',
+                    'java': 'java',
+                    'html': 'html',
+                    'css': 'css',
+                    'json': 'json',
+                    'md': 'markdown',
+                    'php': 'php',
+                    'rb': 'ruby',
+                    'go': 'go',
+                    'c': 'c',
+                    'cpp': 'cpp',
+                    'cs': 'csharp',
+                  };
+                  language = extensionMap[extension.toLowerCase()] || 'text';
+                }
+              }
+              
+              return (
+                <div key={fileIndex} className="code-file mb-4">
+                  <div className="file-header bg-gray-800 text-white text-xs px-3 py-1 rounded-t-md flex justify-between items-center">
+                    <span>{file.filename}</span>
+                    <span className="language-badge px-2 py-0.5 bg-gray-700 rounded text-xs">
+                      {language}
+                    </span>
+                  </div>
+                  <SyntaxHighlighter
+                    language={language}
+                    style={vscDarkPlus}
+                    customStyle={{
+                      margin: 0,
+                      borderTopLeftRadius: 0,
+                      borderTopRightRadius: 0,
+                      borderBottomLeftRadius: '0.375rem',
+                      borderBottomRightRadius: '0.375rem',
+                    }}
+                  >
+                    {file.content}
+                  </SyntaxHighlighter>
+                </div>
+              );
+            })}
+            
+            {/* Build Commands Section */}
+            {parsedMessage.buildcommands && Array.isArray(parsedMessage.buildcommands) && parsedMessage.buildcommands.length > 0 && (
+              <div className="build-commands mt-4">
+                <div className="build-header bg-gray-800 text-white text-xs px-3 py-1 rounded-t-md flex justify-between items-center">
+                  <span>Build Commands</span>
+                  <span className="language-badge px-2 py-0.5 bg-gray-700 rounded text-xs">
+                    shell
+                  </span>
+                </div>
+                <div className="commands-list">
+                  {parsedMessage.buildcommands.map((command, cmdIndex) => (
+                    <div key={cmdIndex} className={cmdIndex !== 0 ? "mt-2" : ""}>
+                      <div className="command-number bg-gray-700 text-gray-300 text-xs px-2 py-0.5">
+                        Command {cmdIndex + 1}
+                      </div>
+                      <SyntaxHighlighter
+                        language="shell"
+                        style={vscDarkPlus}
+                        customStyle={{
+                          margin: 0,
+                          borderRadius: 0,
+                          borderBottomLeftRadius: cmdIndex === parsedMessage.buildcommands.length - 1 ? '0.375rem' : 0,
+                          borderBottomRightRadius: cmdIndex === parsedMessage.buildcommands.length - 1 ? '0.375rem' : 0,
+                        }}
+                      >
+                        {command}
+                      </SyntaxHighlighter>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+    } catch (e) {
+      // If parsing fails, just return the message as is
+      console.log("Not a valid JSON message:", e);
+    }
+    
+    // Default: return the message as plain text
+    return messageContent;
+  };
+
   if (!user) {
     return <div>Loading user data...</div>;
   }
@@ -227,13 +347,9 @@ const Project = () => {
                 {msg.type === "incoming" ? (
                   <div className="incoming flex flex-col p-2 bg-slate-50 w-fit rounded-xl">
                     <small className="opacity-65 text-xs">{msg.sender}</small>
-                    {msg.sender === "AI" ? (
-                      <div className="p-2 whitespace-pre-wrap break-words">
-                        <Markdown>{msg.message}</Markdown>
-                      </div>
-                    ) : (
-                      <p className="p-2">{msg.message}</p>
-                    )}
+                    <div className="p-2 whitespace-pre-wrap break-words">
+                      {msg.sender === "AI" ? renderAIMessage(msg.message) : msg.message}
+                    </div>
                   </div>
                 ) : (
                   <div className="outgoing flex flex-col p-2 bg-slate-50 w-fit rounded-xl ml-auto">

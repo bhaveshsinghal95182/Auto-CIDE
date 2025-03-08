@@ -52,6 +52,7 @@ io.on("connection", async (socket) => {
 
   socket.on("project-message", async (data) => {
     const message = data.message;
+    socket.broadcast.to(socket.roomId).emit("project-message", data);
     if (message.includes("@ai")) {
       // Found @ai keyword in message
 
@@ -65,7 +66,6 @@ io.on("connection", async (socket) => {
       });
       return;
     }
-    socket.broadcast.to(socket.roomId).emit("project-message", data);
   });
 
   socket.on("disconnect", () => {
