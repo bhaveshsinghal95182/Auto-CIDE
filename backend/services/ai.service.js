@@ -21,7 +21,7 @@ const schema = {
     },
     buildcommands: {
       type: SchemaType.ARRAY,
-      description: "List of all necessary terminalcommands to build the project",
+      description: "List of all necessary terminal commands to build the project",
       items: {
         type: SchemaType.STRING,
       },
@@ -30,25 +30,37 @@ const schema = {
       type: SchemaType.OBJECT,
       properties: {
         filetree: {
-          type: SchemaType.ARRAY, // Change from OBJECT to ARRAY
-          description: "List of files in the file tree",
+          type: SchemaType.ARRAY,
+          description: "List of files and directories in the project",
           items: {
             type: SchemaType.OBJECT,
             properties: {
-              filename: {
+              path: {
                 type: SchemaType.STRING,
-                description: "Name of the file",
+                description: "Full path of the file or directory (e.g., 'myproject/directory/foo.js')",
+              },
+              type: {
+                type: SchemaType.STRING,
+                description: "Type of the item: 'file' or 'directory'",
               },
               content: {
                 type: SchemaType.STRING,
-                description: "File content",
+                description: "Content of the file (only for type 'file')",
               },
               language: {
-                type: SchemaType.STRING,  
-                description: "Language of the file",
+                type: SchemaType.STRING,
+                description: "Programming language of the file (only for type 'file')",
+              },
+              symlink: {
+                type: SchemaType.STRING,
+                description: "Target path for symlinks (only for files that are symlinks)",
+              },
+              isSymlink: {
+                type: SchemaType.BOOLEAN,
+                description: "Whether the file is a symlink",
               }
             },
-            required: ["filename", "content", "language"],
+            required: ["path", "type"],
           },
         },
       },
@@ -68,7 +80,53 @@ export const generateResult = async (prompt) => {
       responseSchema: schema,
     },
     systemInstruction:
-      `You are a helpful assistant which is able to generate a project description based on the user's prompt. Always return the code using following format, only use triple backticks for code blocks, and only use one language for each code block.
+      `You are a helpful assistant which is able to generate a project description based on the user's prompt. 
+      
+      For the file structure, use the following format:
+      - Each file should have a "path" (e.g., "myproject/src/index.js"), "type" ("file"), and "content" (the actual code)
+      - For regular files, include "content" and optionally "language"
+      - For symlinks, set "isSymlink" to true and include "symlink" pointing to the target
+      - Directories should have "type" set to "directory" and "path" set to their full path
+      
+      Example of a valid response:
+      {
+        "text": "Here's a simple React project",
+        "code": {
+          "filetree": [
+            {
+              "path": "myproject",
+              "type": "directory"
+            },
+            {
+              "path": "myproject/src",
+              "type": "directory"
+            },
+            {
+              "path": "myproject/src/index.js",
+              "type": "file",
+              "content": "import React from 'react';\\nimport ReactDOM from 'react-dom';\\nimport App from './App';\\n\\nReactDOM.render(<App />, document.getElementById('root'));",
+              "language": "javascript"
+            },
+            {
+              "path": "myproject/src/App.js",
+              "type": "file",
+              "content": "import React from 'react';\\n\\nfunction App() {\\n  return <div>Hello World</div>;\\n}\\n\\nexport default App;",
+              "language": "javascript"
+            },
+            {
+              "path": "myproject/src/link.js",
+              "type": "file",
+              "isSymlink": true,
+              "symlink": "./App.js"
+            }
+          ]
+        },
+        "buildcommands": [
+          "cd myproject",
+          "npm install",
+          "npm start"
+        ]
+      }
       `,
   }
 );

@@ -113,13 +113,58 @@ const Project = () => {
         
         // Update filetree if it exists in the message
         if (parsedMessage.code?.filetree) {
-          setFileTree(parsedMessage.code.filetree);
+          // The filetree is now a flat array of files and directories
+          // Convert it to our internal format
+          const processedFiles = parsedMessage.code.filetree
+            .filter(item => item.type === 'file') // Only process files
+            .map(item => ({
+              filename: item.path,
+              content: item.content || '',
+              language: item.language || detectLanguageFromFilename(item.path),
+              isSymlink: item.isSymlink || false,
+              symlink: item.symlink || ''
+            }));
+          
+          // Update the file tree state
+          if (processedFiles.length > 0) {
+            setFileTree(processedFiles);
+          }
         }
       } catch (e) {
         // Ignore parsing errors
+        console.log("Error processing AI message for filetree:", e);
       }
     }
   }, [messages]);
+
+  // Helper function to detect language from filename
+  const detectLanguageFromFilename = useCallback((filename) => {
+    let language = 'text';
+    const extension = filename.split('.').pop();
+    if (extension) {
+      // Map common extensions to languages
+      const extensionMap = {
+        'js': 'javascript',
+        'jsx': 'jsx',
+        'ts': 'typescript',
+        'tsx': 'tsx',
+        'py': 'python',
+        'java': 'java',
+        'html': 'html',
+        'css': 'css',
+        'json': 'json',
+        'md': 'markdown',
+        'php': 'php',
+        'rb': 'ruby',
+        'go': 'go',
+        'c': 'c',
+        'cpp': 'cpp',
+        'cs': 'csharp',
+      };
+      language = extensionMap[extension.toLowerCase()] || 'text';
+    }
+    return language;
+  }, []);
 
   // Add useEffect to scroll to bottom when messages change
   useEffect(() => {
@@ -241,46 +286,24 @@ const Project = () => {
 
       // Check if it has the expected structure
       if (parsedMessage.text && parsedMessage.code?.filetree) {
+        // Process the flat array of files and directories
+        const processedFiles = parsedMessage.code.filetree
+          .filter(item => item.type === 'file') // Only process files
+          .map(item => ({
+            filename: item.path,
+            content: item.content || '',
+            language: item.language || detectLanguageFromFilename(item.path),
+            isSymlink: item.isSymlink || false,
+            symlink: item.symlink || ''
+          }));
+
         return (
           <div className="ai-message-container">
             {/* Text part */}
             <div className="text-part mb-3">{parsedMessage.text}</div>
 
-            {/* Code part - for each file in filetree */}
-            {parsedMessage.code.filetree.map((file, fileIndex) => {
-              // Determine language from file extension or language field
-              let language = 'text';
-              
-              // Check if language is specified directly
-              if (file.language) {
-                language = file.language;
-              } else {
-                // Try to determine from filename extension
-                const extension = file.filename.split('.').pop();
-                if (extension) {
-                  // Map common extensions to languages
-                  const extensionMap = {
-                    'js': 'javascript',
-                    'jsx': 'jsx',
-                    'ts': 'typescript',
-                    'tsx': 'tsx',
-                    'py': 'python',
-                    'java': 'java',
-                    'html': 'html',
-                    'css': 'css',
-                    'json': 'json',
-                    'md': 'markdown',
-                    'php': 'php',
-                    'rb': 'ruby',
-                    'go': 'go',
-                    'c': 'c',
-                    'cpp': 'cpp',
-                    'cs': 'csharp',
-                  };
-                  language = extensionMap[extension.toLowerCase()] || 'text';
-                }
-              }
-              
+            {/* Code part - for each processed file */}
+            {processedFiles.map((file, fileIndex) => {
               return (
                 <div key={fileIndex} className="code-file mb-4 cursor-pointer">
                   <div className="file-header bg-gray-800 text-white text-xs px-3 py-1 rounded-t-md flex justify-between items-center">
@@ -289,26 +312,28 @@ const Project = () => {
                       <span 
                         className="language-badge px-2 py-0.5 bg-gray-700 rounded text-xs cursor-pointer hover:bg-gray-600"
                       >
-                        {language}
+                        {file.isSymlink ? 'symlink' : file.language}
                       </span>
-                      <button
-                        className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
-                        onClick={() => {
-                          // Add file to openFiles if not already there
-                          if (!openFiles.some(f => f.filename === file.filename)) {
-                            setOpenFiles(prev => [...prev, file]);
-                          }
-                          // Set as current file
-                          setCurrentFile(file);
-                        }}
-                        title="Open in editor"
-                      >
-                        Open
-                      </button>
+                      {!file.isSymlink && (
+                        <button
+                          className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
+                          onClick={() => {
+                            // Add file to openFiles if not already there
+                            if (!openFiles.some(f => f.filename === file.filename)) {
+                              setOpenFiles(prev => [...prev, file]);
+                            }
+                            // Set as current file
+                            setCurrentFile(file);
+                          }}
+                          title="Open in editor"
+                        >
+                          Open
+                        </button>
+                      )}
                     </div>
                   </div>
                   <SyntaxHighlighter
-                    language={language}
+                    language={file.isSymlink ? 'text' : file.language}
                     style={vscDarkPlus}
                     customStyle={{
                       margin: 0,
@@ -318,7 +343,11 @@ const Project = () => {
                       borderBottomRightRadius: '0.375rem',
                     }}
                     onClick={() => {
-                      navigator.clipboard.writeText(file.content);
+                      if (file.isSymlink) {
+                        navigator.clipboard.writeText(file.symlink);
+                      } else {
+                        navigator.clipboard.writeText(file.content);
+                      }
                       // Optional: Add visual feedback
                       const el = document.createElement('div');
                       el.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
@@ -328,7 +357,7 @@ const Project = () => {
                     }}
                     title="Click to copy code"
                   >
-                    {file.content}
+                    {file.isSymlink ? `Symlink to: ${file.symlink}` : file.content}
                   </SyntaxHighlighter>
                 </div>
               );
@@ -389,7 +418,7 @@ const Project = () => {
 
     // Default: return the message as plain text
     return messageContent;
-  }, [openFiles]);
+  }, [openFiles, detectLanguageFromFilename]);
 
   // Memoize the file closing function
   const handleCloseFile = useCallback((filename) => {
@@ -556,30 +585,106 @@ const Project = () => {
             <div className="explorer-header p-2 border-b">
               <h1 className="font-bold">File Explorer</h1>
             </div>
-            <div className="explorer-body">
-              <div className="file-tree">
-                {fileTree.map((file, index) => (
-                  <button
-                    key={index}
-                    className="file-tree-item flex items-center gap-2 cursor-pointer bg-slate-200 hover:bg-slate-300 p-2 w-full"
-                    onClick={() => {
-                      setCurrentFile(file);
-                      if (!openFiles.includes(file)) {
-                        setOpenFiles((prev) => [...prev, file]);
-                      }
-                    }}
-                  >
-                    <i className="ri-file-fill"></i>
-                    <p className="text-sm font-semibold">{file.filename}</p>
-                  </button>
-                ))}
+            <div className="explorer-body overflow-y-auto" style={{ maxHeight: 'calc(100vh - 40px)' }}>
+              <div className="file-tree p-2">
+                {fileTree.length > 0 ? (
+                  <div className="directory">
+                    {/* Group files by directory */}
+                    {(() => {
+                      // Create a directory structure from flat file list
+                      const dirStructure = {};
+                      
+                      // Process each file path into a nested structure
+                      fileTree.forEach(file => {
+                        const parts = file.filename.split('/');
+                        let current = dirStructure;
+                        
+                        // Process each part of the path except the last (filename)
+                        for (let i = 0; i < parts.length - 1; i++) {
+                          const part = parts[i];
+                          if (!current[part]) {
+                            current[part] = { 
+                              type: 'directory',
+                              children: {} 
+                            };
+                          }
+                          current = current[part].children;
+                        }
+                        
+                        // Add the file to the current directory
+                        const fileName = parts[parts.length - 1];
+                        current[fileName] = { 
+                          type: 'file',
+                          data: file
+                        };
+                      });
+                      
+                      // Recursive function to render the directory structure
+                      const renderDirectory = (dir, path = '', level = 0) => {
+                        return Object.entries(dir).map(([name, item], index) => {
+                          const currentPath = path ? `${path}/${name}` : name;
+                          const paddingLeft = level * 12; // Increase padding for each level
+                          
+                          if (item.type === 'directory') {
+                            return (
+                              <div key={currentPath} className="directory-item">
+                                <div 
+                                  className="directory-name flex items-center py-1 hover:bg-slate-300 cursor-pointer"
+                                  style={{ paddingLeft: `${paddingLeft}px` }}
+                                >
+                                  <i className="ri-folder-fill mr-1 text-yellow-600"></i>
+                                  <span className="text-sm font-medium">{name}</span>
+                                </div>
+                                <div className="directory-children">
+                                  {renderDirectory(item.children, currentPath, level + 1)}
+                                </div>
+                              </div>
+                            );
+                          } else if (item.type === 'file') {
+                            return (
+                              <div 
+                                key={currentPath}
+                                className="file-item flex items-center py-1 hover:bg-slate-300 cursor-pointer"
+                                style={{ paddingLeft: `${paddingLeft}px` }}
+                                onClick={() => {
+                                  // Add file to openFiles if not already there
+                                  if (!openFiles.some(f => f.filename === item.data.filename)) {
+                                    setOpenFiles(prev => [...prev, item.data]);
+                                  }
+                                  // Set as current file
+                                  setCurrentFile(item.data);
+                                }}
+                              >
+                                {item.data.isSymlink ? (
+                                  <i className="ri-link mr-1 text-blue-500"></i>
+                                ) : (
+                                  <i className="ri-file-fill mr-1 text-blue-600"></i>
+                                )}
+                                <span className="text-sm">{name}</span>
+                              </div>
+                            );
+                          }
+                          return null;
+                        });
+                        
+                      };
+                      
+                      // Render the root directory
+                      return renderDirectory(dirStructure);
+                    })()}
+                  </div>
+                ) : (
+                  <div className="empty-state text-center py-4 text-gray-500">
+                    <p>No files available</p>
+                  </div>
+                )}
               </div>
             </div>
           </div>
           <div className="code-editor w-4/5 h-full bg-slate-100 overflow-hidden flex flex-col">
             <div className="code-editor-header p-2 border-b">
               {openFiles.map((file, index) => (
-                <button
+                <div
                   key={index}
                   className={`file-tree-item inline-block cursor-pointer p-1 mx-1 border border-black rounded ${
                     CurrentFile && CurrentFile.filename === file.filename
@@ -592,18 +697,27 @@ const Project = () => {
                 >
                   <div className="flex items-center">
                     <h1 className="font-bold text-sm">{file.filename}</h1>
-                    <button
-                      className="ml-2 text-xs hover:text-red-500 focus:outline-none rounded-full w-4 h-4 flex items-center justify-center hover:bg-red-100"
+                    <div
+                      className="ml-2 text-xs hover:text-red-500 focus:outline-none rounded-full w-4 h-4 flex items-center justify-center hover:bg-red-100 cursor-pointer"
                       onClick={(e) => {
-                        e.stopPropagation(); // Prevent triggering the parent button's onClick
+                        e.stopPropagation(); // Prevent triggering the parent div's onClick
                         handleCloseFile(file.filename);
                       }}
                       title="Close file"
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleCloseFile(file.filename);
+                        }
+                      }}
                     >
                       ✕
-                    </button>
+                    </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
             <div className="code-editor-body flex-grow overflow-hidden">
