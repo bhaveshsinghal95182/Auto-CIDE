@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef } from "react";
+import React, { useState, useEffect, useContext, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "../config/axios";
 import {
@@ -8,8 +8,8 @@ import {
   socketInstance,
 } from "../config/socket";
 import UserContext from "../context/user.context";
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
 
 const Project = () => {
   const location = useLocation();
@@ -26,6 +26,9 @@ const Project = () => {
   const messageBoxRef = useRef(null);
   const [messageBoxWidth, setMessageBoxWidth] = useState(20);
   const [isResizing, setIsResizing] = useState(false);
+  const [fileTree, setFileTree] = useState([]);
+  const [CurrentFile, setCurrentFile] = useState(null);
+  const [openFiles, setOpenFiles] = useState([]);
 
   // First useEffect to handle user authentication
   useEffect(() => {
@@ -80,17 +83,43 @@ const Project = () => {
         setUsers([]);
       });
 
-    receiveMessage("project-message", (message) => {
+    // Set up socket message handler
+    const handleProjectMessage = (message) => {
       addMessage(message, "incoming");
-    });
+    };
+
+    // Register socket event handler
+    receiveMessage("project-message", handleProjectMessage);
 
     // Cleanup socket connection on unmount
     return () => {
       if (socketInstance) {
+        // Remove the specific event handler
+        socketInstance.off("project-message", handleProjectMessage);
         socketInstance.disconnect();
       }
     };
   }, [projectId, user, navigate]);
+
+  // Add useEffect to handle filetree updates from AI messages
+  useEffect(() => {
+    // Process messages to extract filetree data
+    const aiMessages = messages.filter(msg => msg.sender === "AI");
+    if (aiMessages.length > 0) {
+      try {
+        // Get the latest AI message
+        const latestMessage = aiMessages[aiMessages.length - 1];
+        const parsedMessage = JSON.parse(latestMessage.message);
+        
+        // Update filetree if it exists in the message
+        if (parsedMessage.code?.filetree) {
+          setFileTree(parsedMessage.code.filetree);
+        }
+      } catch (e) {
+        // Ignore parsing errors
+      }
+    }
+  }, [messages]);
 
   // Add useEffect to scroll to bottom when messages change
   useEffect(() => {
@@ -101,10 +130,10 @@ const Project = () => {
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isResizing) return;
-      
+
       // Calculate new width as percentage of window width
       const newWidth = (e.clientX / window.innerWidth) * 100;
-      
+
       // Limit the width between 15% and 50%
       if (newWidth >= 15 && newWidth <= 50) {
         setMessageBoxWidth(newWidth);
@@ -116,25 +145,26 @@ const Project = () => {
     };
 
     if (isResizing) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
     }
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
     };
   }, [isResizing]);
 
-  const handleUserClick = (id) => {
+  // Memoize callback functions
+  const handleUserClick = useCallback((id) => {
     setSelectedUserId((prevIds) =>
       prevIds.includes(id)
         ? prevIds.filter((uid) => uid !== id)
         : [...prevIds, id]
     );
-  };
+  }, []);
 
-  const addCollaborators = () => {
+  const addCollaborators = useCallback(() => {
     axios
       .put("/projects/add-user", {
         projectId: projectId,
@@ -146,9 +176,29 @@ const Project = () => {
       .catch((err) => {
         console.error("Error adding collaborators:", err);
       });
-  };
+  }, [projectId, selectedUserId]);
 
-  const sendSomeMessage = (message) => {
+  // Memoize addMessage function - define this first
+  const addMessage = useCallback((messageData, type) => {
+    // Use a function to update state based on previous state
+    setMessages((prevMessages) => {
+      const newMessage = { ...messageData, type };
+      
+      // Check if this exact message already exists to prevent duplicates
+      const messageExists = prevMessages.some(
+        (msg) => 
+          msg.message === newMessage.message && 
+          msg.sender === newMessage.sender && 
+          msg.type === newMessage.type
+      );
+      
+      // Only add if it doesn't exist
+      return messageExists ? prevMessages : [...prevMessages, newMessage];
+    });
+  }, []);
+
+  // Now define sendSomeMessage which depends on addMessage
+  const sendSomeMessage = useCallback((message) => {
     if (!user) {
       console.error("User is not logged in.");
       return;
@@ -165,44 +215,37 @@ const Project = () => {
       projectId: projectId,
     });
 
-    addMessage({
-      message: message,
-      sender: user.email,
-      projectId: projectId,
-    }, "outgoing");
+    addMessage(
+      {
+        message: message,
+        sender: user.email,
+        projectId: projectId,
+      },
+      "outgoing"
+    );
 
     setMessage("");
-  };
+  }, [user, projectId, addMessage]);
 
-  // New function to add messages to state
-  const addMessage = (messageData, type) => {
-    setMessages(prevMessages => [
-      ...prevMessages, 
-      { ...messageData, type }
-    ]);
-  };
-
-  function scrollToBottom() {
+  const scrollToBottom = useCallback(() => {
     if (messageBoxRef.current) {
       messageBoxRef.current.scrollTop = messageBoxRef.current.scrollHeight;
     }
-  }
+  }, []);
 
-  // Function to render AI message content
-  const renderAIMessage = (messageContent) => {
+  // Function to render AI message content - memoize to prevent re-renders
+  const renderAIMessage = useCallback((messageContent) => {
     try {
       // Try to parse the message as JSON
       const parsedMessage = JSON.parse(messageContent);
-      
+
       // Check if it has the expected structure
       if (parsedMessage.text && parsedMessage.code?.filetree) {
         return (
           <div className="ai-message-container">
             {/* Text part */}
-            <div className="text-part mb-3">
-              {parsedMessage.text}
-            </div>
-            
+            <div className="text-part mb-3">{parsedMessage.text}</div>
+
             {/* Code part - for each file in filetree */}
             {parsedMessage.code.filetree.map((file, fileIndex) => {
               // Determine language from file extension or language field
@@ -239,12 +282,30 @@ const Project = () => {
               }
               
               return (
-                <div key={fileIndex} className="code-file mb-4">
+                <div key={fileIndex} className="code-file mb-4 cursor-pointer">
                   <div className="file-header bg-gray-800 text-white text-xs px-3 py-1 rounded-t-md flex justify-between items-center">
                     <span>{file.filename}</span>
-                    <span className="language-badge px-2 py-0.5 bg-gray-700 rounded text-xs">
-                      {language}
-                    </span>
+                    <div className="flex items-center">
+                      <span 
+                        className="language-badge px-2 py-0.5 bg-gray-700 rounded text-xs cursor-pointer hover:bg-gray-600"
+                      >
+                        {language}
+                      </span>
+                      <button
+                        className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
+                        onClick={() => {
+                          // Add file to openFiles if not already there
+                          if (!openFiles.some(f => f.filename === file.filename)) {
+                            setOpenFiles(prev => [...prev, file]);
+                          }
+                          // Set as current file
+                          setCurrentFile(file);
+                        }}
+                        title="Open in editor"
+                      >
+                        Open
+                      </button>
+                    </div>
                   </div>
                   <SyntaxHighlighter
                     language={language}
@@ -256,45 +317,68 @@ const Project = () => {
                       borderBottomLeftRadius: '0.375rem',
                       borderBottomRightRadius: '0.375rem',
                     }}
+                    onClick={() => {
+                      navigator.clipboard.writeText(file.content);
+                      // Optional: Add visual feedback
+                      const el = document.createElement('div');
+                      el.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+                      el.textContent = 'Code copied to clipboard!';
+                      document.body.appendChild(el);
+                      setTimeout(() => el.remove(), 2000);
+                    }}
+                    title="Click to copy code"
                   >
                     {file.content}
                   </SyntaxHighlighter>
                 </div>
               );
             })}
-            
+
             {/* Build Commands Section */}
-            {parsedMessage.buildcommands && Array.isArray(parsedMessage.buildcommands) && parsedMessage.buildcommands.length > 0 && (
-              <div className="build-commands mt-4">
-                <div className="build-header bg-gray-800 text-white text-xs px-3 py-1 rounded-t-md flex justify-between items-center">
-                  <span>Build Commands</span>
-                  <span className="language-badge px-2 py-0.5 bg-gray-700 rounded text-xs">
-                    shell
-                  </span>
-                </div>
-                <div className="commands-list">
-                  {parsedMessage.buildcommands.map((command, cmdIndex) => (
-                    <div key={cmdIndex} className={cmdIndex !== 0 ? "mt-2" : ""}>
-                      <div className="command-number bg-gray-700 text-gray-300 text-xs px-2 py-0.5">
-                        Command {cmdIndex + 1}
-                      </div>
-                      <SyntaxHighlighter
-                        language="shell"
-                        style={vscDarkPlus}
-                        customStyle={{
-                          margin: 0,
-                          borderRadius: 0,
-                          borderBottomLeftRadius: cmdIndex === parsedMessage.buildcommands.length - 1 ? '0.375rem' : 0,
-                          borderBottomRightRadius: cmdIndex === parsedMessage.buildcommands.length - 1 ? '0.375rem' : 0,
-                        }}
+            {parsedMessage.buildcommands &&
+              Array.isArray(parsedMessage.buildcommands) &&
+              parsedMessage.buildcommands.length > 0 && (
+                <div className="build-commands mt-4">
+                  <div className="build-header bg-gray-800 text-white text-xs px-3 py-1 rounded-t-md flex justify-between items-center">
+                    <span>Build Commands</span>
+                    <span className="language-badge px-2 py-0.5 bg-gray-700 rounded text-xs">
+                      shell
+                    </span>
+                  </div>
+                  <div className="commands-list">
+                    {parsedMessage.buildcommands.map((command, cmdIndex) => (
+                      <div
+                        key={cmdIndex}
+                        className={cmdIndex !== 0 ? "mt-2" : ""}
                       >
-                        {command}
-                      </SyntaxHighlighter>
-                    </div>
-                  ))}
+                        <div className="command-number bg-gray-700 text-gray-300 text-xs px-2 py-0.5">
+                          Command {cmdIndex + 1}
+                        </div>
+                        <SyntaxHighlighter
+                          language="shell"
+                          style={vscDarkPlus}
+                          customStyle={{
+                            margin: 0,
+                            borderRadius: 0,
+                            borderBottomLeftRadius:
+                              cmdIndex ===
+                              parsedMessage.buildcommands.length - 1
+                                ? "0.375rem"
+                                : 0,
+                            borderBottomRightRadius:
+                              cmdIndex ===
+                              parsedMessage.buildcommands.length - 1
+                                ? "0.375rem"
+                                : 0,
+                          }}
+                        >
+                          {command}
+                        </SyntaxHighlighter>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
           </div>
         );
       }
@@ -302,10 +386,24 @@ const Project = () => {
       // If parsing fails, just return the message as is
       console.log("Not a valid JSON message:", e);
     }
-    
+
     // Default: return the message as plain text
     return messageContent;
-  };
+  }, [openFiles]);
+
+  // Memoize the file closing function
+  const handleCloseFile = useCallback((filename) => {
+    setOpenFiles(prev => {
+      const remainingFiles = prev.filter(f => f.filename !== filename);
+      
+      // If the current file is being closed, set current file to the next available file or null
+      if (CurrentFile && CurrentFile.filename === filename) {
+        setCurrentFile(remainingFiles.length > 0 ? remainingFiles[0] : null);
+      }
+      
+      return remainingFiles;
+    });
+  }, [CurrentFile]);
 
   if (!user) {
     return <div>Loading user data...</div>;
@@ -313,7 +411,8 @@ const Project = () => {
 
   return (
     <main className="h-screen w-screen flex">
-      <section 
+      {/* Left Side */}
+      <section
         className="left relative flex flex-col h-full bg-slate-700"
         style={{ width: `${messageBoxWidth}%` }}
       >
@@ -348,7 +447,9 @@ const Project = () => {
                   <div className="incoming flex flex-col p-2 bg-slate-50 w-fit rounded-xl">
                     <small className="opacity-65 text-xs">{msg.sender}</small>
                     <div className="p-2 whitespace-pre-wrap break-words">
-                      {msg.sender === "AI" ? renderAIMessage(msg.message) : msg.message}
+                      {msg.sender === "AI"
+                        ? renderAIMessage(msg.message)
+                        : msg.message}
                     </div>
                   </div>
                 ) : (
@@ -442,13 +543,91 @@ const Project = () => {
 
       {/* Resize Handle */}
       <div
-        className="resize-handle w-1 h-full bg-gray-300 cursor-col-resize hover:bg-gray-400 active:bg-gray-500"
+        className="resize-handle w-2 h-full bg-gray-300 cursor-col-resize hover:bg-gray-400 active:bg-gray-500 z-10"
         onMouseDown={() => setIsResizing(true)}
       ></div>
 
+      {/* Right Side */}
       {/* Content area (can be used for the main project content) */}
       <section className="right flex-grow h-full bg-white">
         {/* Content can be added here */}
+        <div className="flex h-full">
+          <div className="explorer w-1/5 h-full bg-slate-200">
+            <div className="explorer-header p-2 border-b">
+              <h1 className="font-bold">File Explorer</h1>
+            </div>
+            <div className="explorer-body">
+              <div className="file-tree">
+                {fileTree.map((file, index) => (
+                  <button
+                    key={index}
+                    className="file-tree-item flex items-center gap-2 cursor-pointer bg-slate-200 hover:bg-slate-300 p-2 w-full"
+                    onClick={() => {
+                      setCurrentFile(file);
+                      if (!openFiles.includes(file)) {
+                        setOpenFiles((prev) => [...prev, file]);
+                      }
+                    }}
+                  >
+                    <i className="ri-file-fill"></i>
+                    <p className="text-sm font-semibold">{file.filename}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="code-editor w-4/5 h-full bg-slate-100 overflow-hidden flex flex-col">
+            <div className="code-editor-header p-2 border-b">
+              {openFiles.map((file, index) => (
+                <button
+                  key={index}
+                  className={`file-tree-item inline-block cursor-pointer p-1 mx-1 border border-black rounded ${
+                    CurrentFile && CurrentFile.filename === file.filename
+                      ? "bg-slate-400 text-white font-semibold"
+                      : "bg-slate-200 hover:bg-slate-300"
+                  }`}
+                  onClick={() => {
+                    setCurrentFile(file);
+                  }}
+                >
+                  <div className="flex items-center">
+                    <h1 className="font-bold text-sm">{file.filename}</h1>
+                    <button
+                      className="ml-2 text-xs hover:text-red-500 focus:outline-none rounded-full w-4 h-4 flex items-center justify-center hover:bg-red-100"
+                      onClick={(e) => {
+                        e.stopPropagation(); // Prevent triggering the parent button's onClick
+                        handleCloseFile(file.filename);
+                      }}
+                      title="Close file"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="code-editor-body flex-grow overflow-hidden">
+              {CurrentFile && (
+                <div className="code-editor-content h-full overflow-auto">
+                  <SyntaxHighlighter
+                    language={CurrentFile.language}
+                    style={vscDarkPlus}
+                    customStyle={{
+                      height: "100%",
+                      width: "100%",
+                      margin: 0,
+                      padding: "1rem",
+                      borderRadius: 0,
+                      overflow: "auto",
+                    }}
+                  >
+                    {CurrentFile.content}
+                  </SyntaxHighlighter>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </section>
 
       {/* Modal */}
@@ -467,7 +646,6 @@ const Project = () => {
               </button>
             </header>
             <div className="users-list flex flex-col gap-2 mb-16 max-h-96 overflow-auto">
-              {console.log("Current users:", users)}
               {Array.isArray(users) && users.length > 0 ? (
                 users
                   .filter((u) => u._id !== user?._id)
