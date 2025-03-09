@@ -3,6 +3,12 @@ import socket from "socket.io-client";
 let socketInstance = null;
 
 export const initializeSocket = (projectId) => {
+  // If projectId is empty, don't initialize socket
+  if (!projectId) {
+    console.warn("Cannot initialize socket: projectId is empty");
+    return null;
+  }
+
   const token = localStorage.getItem("token");
 
   socketInstance = socket(import.meta.env.VITE_API_URL, {

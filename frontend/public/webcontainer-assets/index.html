@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebContainer Preview</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+      color: #333;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      background-color: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+    h1 {
+      color: #2563eb;
+      margin-top: 0;
+    }
+    pre {
+      background-color: #f1f5f9;
+      padding: 15px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+    .success {
+      color: #16a34a;
+      font-weight: bold;
+    }
+    .info {
+      color: #2563eb;
+    }
+    .warning {
+      color: #ca8a04;
+    }
+    .error {
+      color: #dc2626;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>WebContainer Preview</h1>
+    <p>This is the default preview page for your WebContainer environment.</p>
+    
+    <h2>Getting Started</h2>
+    <p>To see your application, you need to:</p>
+    <ol>
+      <li>Mount your files to the WebContainer</li>
+      <li>Run your application using the terminal</li>
+      <li>Access your application at the appropriate port</li>
+    </ol>
+    
+    <h2>Example Commands</h2>
+    <pre><code># List files
+ls -la
+
+# Install dependencies
+npm install
+
+# Start a Node.js application
+node index.js
+
+# Start a development server
+npm run dev</code></pre>
+    
+    <p class="info">Use the terminal in the editor to run commands in this environment.</p>
+    <p class="success">Your files have been successfully mounted to the WebContainer.</p>
+  </div>
+</body>
+</html> 

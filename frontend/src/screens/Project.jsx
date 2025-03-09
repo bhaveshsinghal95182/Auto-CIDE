@@ -7,6 +7,12 @@ import {
   sendMessage,
   socketInstance,
 } from "../config/socket";
+import { 
+  initializeWebContainer, 
+  mountFilesToWebContainer,
+  startDevServer,
+  getServerUrl
+} from "../config/webContainer";
 import UserContext from "../context/user.context";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -25,7 +31,7 @@ const Project = () => {
 
   // Project
   const [project, setProject] = useState(null);
-  const [projectId, setProjectId] = useState(location.state._id);
+  const [projectId, setProjectId] = useState(location.state?._id || '');
 
   // Messages
   const [message, setMessage] = useState("");
@@ -38,10 +44,71 @@ const Project = () => {
   const [fileTree, setFileTree] = useState([]);
   const [CurrentFile, setCurrentFile] = useState(null);
   const [openFiles, setOpenFiles] = useState([]);
+  const processedMessagesRef = useRef(new Set());
 
   // Web Containers
-  const [webContainer, setWebContainer] = useState([]);
+  const [webContainer, setWebContainer] = useState(null);
+  const [webContainerStatus, setWebContainerStatus] = useState('not-initialized');
+  const [serverUrl, setServerUrl] = useState('');
+  const [isServerRunning, setIsServerRunning] = useState(false);
   
+  // Terminal state
+  const [terminals, setTerminals] = useState([
+    {
+      id: 'terminal-1',
+      name: 'Terminal 1',
+      output: [],
+      command: '',
+      isLoading: false,
+      process: null,
+      visible: false
+    }
+  ]);
+  const [activeTerminalId, setActiveTerminalId] = useState('terminal-1');
+  const [terminalVisible, setTerminalVisible] = useState(false);
+  const terminalRefs = useRef({});
+  
+  // Preview state
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewVisible, setPreviewVisible] = useState(false);
+  
+  // Function to detect language from filename
+  const detectLanguageFromFilename = useCallback((filename) => {
+    let language = 'text';
+    const extension = filename.split('.').pop();
+    if (extension) {
+      // Map common extensions to languages
+      const extensionMap = {
+        'js': 'javascript',
+        'jsx': 'jsx',
+        'ts': 'typescript',
+        'tsx': 'tsx',
+        'py': 'python',
+        'java': 'java',
+        'html': 'html',
+        'css': 'css',
+        'json': 'json',
+        'md': 'markdown',
+        'php': 'php',
+        'rb': 'ruby',
+        'go': 'go',
+        'c': 'c',
+        'cpp': 'cpp',
+        'cs': 'csharp',
+      };
+      language = extensionMap[extension.toLowerCase()] || 'text';
+    }
+    return language;
+  }, []);
+
+  // Check if we have valid project data on component mount
+  useEffect(() => {
+    if (!location.state) {
+      // If no project data was passed, redirect to projects page
+      navigate("/projects");
+    }
+  }, [location.state, navigate]);
+
   // First useEffect to handle user authentication
   useEffect(() => {
     if (!user) {
@@ -51,6 +118,137 @@ const Project = () => {
       }
     }
   }, [user, navigate]);
+
+  // Helper function to show notifications
+  const showNotification = useCallback((message, type = 'info', duration = 5000, actions = null) => {
+    const el = document.createElement('div');
+    el.className = `fixed bottom-4 right-4 px-4 py-3 rounded shadow-lg z-50 flex items-center ${
+      type === 'success' ? 'bg-green-500 text-white' : 
+      type === 'error' ? 'bg-red-500 text-white' : 
+      type === 'warning' ? 'bg-yellow-500 text-white' : 
+      'bg-blue-500 text-white'
+    }`;
+    
+    // Add icon based on notification type
+    const iconDiv = document.createElement('div');
+    iconDiv.className = 'mr-3 flex-shrink-0';
+    
+    if (type === 'success') {
+      iconDiv.innerHTML = `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+      </svg>`;
+    } else if (type === 'error') {
+      iconDiv.innerHTML = `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+      </svg>`;
+    } else if (type === 'warning') {
+      iconDiv.innerHTML = `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+      </svg>`;
+    } else {
+      iconDiv.innerHTML = `<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+      </svg>`;
+    }
+    
+    el.appendChild(iconDiv);
+    
+    // Add message
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'flex-grow';
+    messageDiv.textContent = message;
+    el.appendChild(messageDiv);
+    
+    // Add actions if provided
+    if (actions) {
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'ml-4 flex-shrink-0';
+      
+      actions.forEach(action => {
+        const button = document.createElement('button');
+        button.className = 'ml-2 bg-white text-gray-800 hover:bg-gray-100 text-xs px-2 py-1 rounded';
+        button.textContent = action.label;
+        button.onclick = () => {
+          action.onClick();
+          if (action.closeNotification) {
+            document.body.removeChild(el);
+          }
+        };
+        actionsDiv.appendChild(button);
+      });
+      
+      el.appendChild(actionsDiv);
+    }
+    
+    document.body.appendChild(el);
+    
+    // Auto-remove after duration
+    if (duration > 0) {
+      setTimeout(() => {
+        if (document.body.contains(el)) {
+          document.body.removeChild(el);
+        }
+      }, duration);
+    }
+    
+    return el;
+  }, []);
+
+  // Function to initialize or retry WebContainer initialization
+  const initializeWebContainerWithNotifications = useCallback(() => {
+    setWebContainerStatus('initializing');
+    
+    // Show initializing notification
+    showNotification('Initializing WebContainer...', 'info');
+    
+    initializeWebContainer()
+      .then((container) => {
+        setWebContainer(container);
+        setWebContainerStatus('initialized');
+        console.log("Web container initialized");
+        
+        // Mount the file tree to the WebContainer
+        mountFilesToWebContainer(container, fileTree)
+          .then(() => {
+            console.log("Files mounted to WebContainer");
+          })
+          .catch((error) => {
+            console.error("Error mounting files to WebContainer:", error);
+          });
+        
+        // Show success notification
+        showNotification('WebContainer initialized successfully!', 'success', 3000);
+      })
+      .catch((error) => {
+        setWebContainerStatus('error');
+        console.error("Failed to initialize WebContainer:", error);
+        
+        // Check if this is a cross-origin isolation error
+        const isCrossOriginError = error.message.includes('SharedArrayBuffer') || 
+                                  error.message.includes('crossOriginIsolated');
+        
+        // Show error notification with retry button
+        showNotification(
+          isCrossOriginError 
+            ? `WebContainer requires cross-origin isolation. Please run the app with 'npm run dev:webcontainer' instead.` 
+            : `WebContainer initialization failed: ${error.message}`, 
+          'error', 
+          0, // Don't auto-dismiss
+          [
+            { 
+              label: 'Retry', 
+              onClick: () => initializeWebContainerWithNotifications(), 
+              closeNotification: true 
+            },
+            { 
+              label: 'Dismiss', 
+              onClick: () => {}, 
+              closeNotification: true 
+            }
+          ]
+        );
+      });
+  }, [showNotification, fileTree]);
 
   // Second useEffect to handle data fetching and socket initialization
   useEffect(() => {
@@ -64,8 +262,22 @@ const Project = () => {
       return;
     }
 
+    // If projectId is empty, redirect to projects page
+    if (!projectId) {
+      navigate("/projects");
+      return;
+    }
+
     // Initialize socket with projectId
-    initializeSocket(projectId);
+    const socket = initializeSocket(projectId);
+    if (!socket) {
+      console.warn("Socket initialization failed. Some features may not work properly.");
+    }
+
+    // Initialize web container
+    if (webContainerStatus === 'not-initialized') {
+      initializeWebContainerWithNotifications();
+    }
 
     // Existing project fetch
     axios
@@ -101,7 +313,9 @@ const Project = () => {
     };
 
     // Register socket event handler
-    receiveMessage("project-message", handleProjectMessage);
+    if (socketInstance) {
+      receiveMessage("project-message", handleProjectMessage);
+    }
 
     // Cleanup socket connection on unmount
     return () => {
@@ -111,7 +325,125 @@ const Project = () => {
         socketInstance.disconnect();
       }
     };
-  }, [projectId, user, navigate]);
+  }, [projectId, user, navigate, initializeWebContainerWithNotifications, webContainerStatus]);
+
+  // Helper function to merge new files with existing files
+  const mergeFileTree = useCallback((newFiles, existingFiles) => {
+    if (!newFiles || newFiles.length === 0) return existingFiles;
+    if (!existingFiles || existingFiles.length === 0) {
+      // If there are no existing files, mark all new files as needing to be mounted
+      return newFiles.map(file => ({
+        ...file,
+        hasUnsavedChanges: true,
+        mountedToWebContainer: false
+      }));
+    }
+    
+    // Create a map of existing files by filename for quick lookup
+    const existingFilesMap = existingFiles.reduce((map, file) => {
+      map[file.filename] = file;
+      return map;
+    }, {});
+    
+    // Process each new file
+    const mergedFiles = [...existingFiles]; // Start with existing files
+    const updatedFiles = []; // Track which files were updated
+    let hasChanges = false; // Track if any changes were made
+    
+    newFiles.forEach(newFile => {
+      const existingFile = existingFilesMap[newFile.filename];
+      
+      if (existingFile) {
+        // File exists - handle based on file type and content
+        if (!existingFile.isSymlink && !newFile.isSymlink) {
+          // Both are regular files
+          
+          // Check if content is identical
+          if (existingFile.content === newFile.content) {
+            console.log(`File ${newFile.filename} already exists with identical content`);
+            return; // Skip this file
+          }
+          
+          // Check if new content is already a subset of existing content
+          if (existingFile.content.includes(newFile.content)) {
+            console.log(`File ${newFile.filename} already contains the new content`);
+            return; // Skip this file
+          }
+          
+          // Check if existing content is a subset of new content
+          if (newFile.content.includes(existingFile.content)) {
+            // Replace with new content as it's more comprehensive
+            const index = mergedFiles.findIndex(f => f.filename === newFile.filename);
+            if (index !== -1) {
+              mergedFiles[index] = {
+                ...existingFile,
+                content: newFile.content,
+                hasUnsavedChanges: true,
+                mountedToWebContainer: false
+              };
+              updatedFiles.push(newFile.filename);
+              hasChanges = true;
+              console.log(`Replaced content in ${newFile.filename} with more comprehensive version`);
+            }
+            return;
+          }
+          
+          // Default: append content with a separator
+          const index = mergedFiles.findIndex(f => f.filename === newFile.filename);
+          if (index !== -1) {
+            mergedFiles[index] = {
+              ...existingFile,
+              content: existingFile.content + '\n\n// New content from AI:\n\n' + newFile.content,
+              hasUnsavedChanges: true,
+              mountedToWebContainer: false
+            };
+            
+            updatedFiles.push(newFile.filename);
+            hasChanges = true;
+            console.log(`Appended content to existing file: ${newFile.filename}`);
+          }
+        }
+        // If either is a symlink, don't modify (symlinks can't be appended to)
+        else if (existingFile.isSymlink !== newFile.isSymlink) {
+          console.log(`Skipping ${newFile.filename}: Can't convert between regular file and symlink`);
+        }
+      } else {
+        // File doesn't exist - add it to the merged array
+        mergedFiles.push({
+          ...newFile,
+          hasUnsavedChanges: true,
+          mountedToWebContainer: false
+        });
+        updatedFiles.push(newFile.filename);
+        hasChanges = true;
+        console.log(`Added new file: ${newFile.filename}`);
+      }
+    });
+    
+    // Update current file if it was modified
+    if (CurrentFile && updatedFiles.includes(CurrentFile.filename)) {
+      const updatedFile = mergedFiles.find(f => f.filename === CurrentFile.filename);
+      if (updatedFile) {
+        setCurrentFile({
+          ...updatedFile,
+          hasUnsavedChanges: true
+        });
+      }
+    }
+    
+    // Show notification about the changes
+    if (updatedFiles.length > 0) {
+      showNotification(
+        `Updated ${updatedFiles.length} files: ${updatedFiles.slice(0, 3).join(', ')}${updatedFiles.length > 3 ? '...' : ''}`, 
+        'info', 
+        5000
+      );
+    }
+    
+    // Only return the new merged files if changes were made
+    // This prevents unnecessary state updates
+    return hasChanges ? mergedFiles : existingFiles;
+  }, [CurrentFile, showNotification, setCurrentFile]);
 
   // Add useEffect to handle filetree updates from AI messages
   useEffect(() => {
@@ -121,6 +453,16 @@ const Project = () => {
       try {
         // Get the latest AI message
         const latestMessage = aiMessages[aiMessages.length - 1];
+        
+        // Generate a unique ID for the message (or use an existing one)
+        const messageId = latestMessage.id || latestMessage.timestamp || JSON.stringify(latestMessage).slice(0, 100);
+        
+        // Skip if we've already processed this message
+        if (processedMessagesRef.current.has(messageId)) {
+          console.log("Skipping already processed AI message:", messageId);
+          return;
+        }
+        
         const parsedMessage = JSON.parse(latestMessage.message);
         
         // Update filetree if it exists in the message
@@ -137,46 +479,25 @@ const Project = () => {
               symlink: item.symlink || ''
             }));
           
-          // Update the file tree state
+          // Merge with existing files instead of replacing them
           if (processedFiles.length > 0) {
-            setFileTree(processedFiles);
+            console.log(`Processing ${processedFiles.length} files from AI message:`, messageId);
+            setFileTree(prevFileTree => {
+              const mergedFiles = mergeFileTree(processedFiles, prevFileTree);
+              return mergedFiles;
+            });
+            // Notification is now handled in mergeFileTree
           }
+          
+          // Mark the message as processed to prevent reprocessing
+          processedMessagesRef.current.add(messageId);
         }
       } catch (e) {
         // Ignore parsing errors
         console.log("Error processing AI message for filetree:", e);
       }
     }
-  }, [messages]);
-
-  // Helper function to detect language from filename
-  const detectLanguageFromFilename = useCallback((filename) => {
-    let language = 'text';
-    const extension = filename.split('.').pop();
-    if (extension) {
-      // Map common extensions to languages
-      const extensionMap = {
-        'js': 'javascript',
-        'jsx': 'jsx',
-        'ts': 'typescript',
-        'tsx': 'tsx',
-        'py': 'python',
-        'java': 'java',
-        'html': 'html',
-        'css': 'css',
-        'json': 'json',
-        'md': 'markdown',
-        'php': 'php',
-        'rb': 'ruby',
-        'go': 'go',
-        'c': 'c',
-        'cpp': 'cpp',
-        'cs': 'csharp',
-      };
-      language = extensionMap[extension.toLowerCase()] || 'text';
-    }
-    return language;
-  }, []);
+  }, [messages, mergeFileTree, detectLanguageFromFilename]);
 
   // Add useEffect to scroll to bottom when messages change
   useEffect(() => {
@@ -289,12 +610,16 @@ const Project = () => {
     // Prepare the message with context for the server
     const serverMessage = prepareMessageWithContext(message);
 
-    // Send the message with context to the server
+    // Send the message with context to the server if socket is connected
+    if (socketInstance) {
     sendMessage("project-message", {
-      message: serverMessage,
+        message: serverMessage,
       sender: user.email,
       projectId: projectId,
     });
+    } else {
+      console.warn("Socket not connected. Message not sent to server.");
+    }
 
     // Add the original message (without context) to the UI
     addMessage(
@@ -350,17 +675,40 @@ const Project = () => {
                         className="language-badge px-2 py-0.5 bg-gray-700 rounded text-xs cursor-pointer hover:bg-gray-600"
                       >
                         {file.isSymlink ? 'symlink' : file.language}
-                      </span>
+                    </span>
                       {!file.isSymlink && (
                         <button
                           className="ml-2 text-xs bg-blue-600 hover:bg-blue-700 text-white px-2 py-0.5 rounded"
                           onClick={() => {
-                            // Add file to openFiles if not already there
-                            if (!openFiles.some(f => f.filename === file.filename)) {
-                              setOpenFiles(prev => [...prev, file]);
+                            // Check if the file already exists in the file tree
+                            const existingFile = fileTree.find(f => f.filename === file.filename);
+                            
+                            if (existingFile) {
+                              // If it exists, use that version instead of the one from the message
+                              // This prevents overwriting any changes the user might have made
+                              if (!openFiles.some(f => f.filename === file.filename)) {
+                                setOpenFiles(prev => [...prev, existingFile]);
+                              }
+                              setCurrentFile(existingFile);
+                            } else {
+                              // If it doesn't exist, add it to the file tree first with proper flags
+                              const newFile = {
+                                ...file,
+                                hasUnsavedChanges: true,
+                                mountedToWebContainer: false
+                              };
+                              
+                              // Add to file tree
+                              setFileTree(prev => [...prev, newFile]);
+                              
+                              // Add to open files
+                              if (!openFiles.some(f => f.filename === file.filename)) {
+                                setOpenFiles(prev => [...prev, newFile]);
+                              }
+                              
+                              // Set as current file
+                              setCurrentFile(newFile);
                             }
-                            // Set as current file
-                            setCurrentFile(file);
                           }}
                           title="Open in editor"
                         >
@@ -455,7 +803,7 @@ const Project = () => {
 
     // Default: return the message as plain text
     return messageContent;
-  }, [openFiles, detectLanguageFromFilename]);
+  }, [openFiles, fileTree, setOpenFiles, setCurrentFile, setFileTree, detectLanguageFromFilename]);
 
   // Memoize the file closing function
   const handleCloseFile = useCallback((filename) => {
@@ -482,7 +830,61 @@ const Project = () => {
     });
   }, [CurrentFile, openFiles]);
 
-  // Add a function to save file changes
+  // Add useEffect to mount files to WebContainer when fileTree changes
+  useEffect(() => {
+    // Only proceed if WebContainer is initialized and we have files
+    if (webContainerStatus === 'initialized' && webContainer && fileTree.length > 0) {
+      console.log("File tree changed, checking for files to mount...");
+      
+      // Find files that have unsaved changes AND haven't been mounted yet
+      // This prevents the circular mounting issue
+      const changedFiles = fileTree.filter(file => 
+        file.hasUnsavedChanges && !file.mountedToWebContainer
+      );
+      
+      if (changedFiles.length > 0) {
+        console.log(`Found ${changedFiles.length} files to mount`);
+        
+        // Use a timeout to debounce multiple rapid changes
+        // This prevents mounting the same files multiple times in quick succession
+        const timeoutId = setTimeout(() => {
+          console.log(`Mounting ${changedFiles.length} files to WebContainer...`);
+          
+          // Only mount the changed files for efficiency
+          mountFilesToWebContainer(webContainer, changedFiles)
+            .then(() => {
+              console.log(`Mounted ${changedFiles.length} changed files to WebContainer`);
+              
+              // Mark files as mounted in WebContainer (but still unsaved in UI)
+              // This prevents remounting the same files repeatedly
+              setFileTree(prev => 
+                prev.map(file => 
+                  changedFiles.some(cf => cf.filename === file.filename)
+                    ? { ...file, mountedToWebContainer: true }
+                    : file
+                )
+              );
+              
+              // Optional: Show a notification for large changes
+              if (changedFiles.length > 3) {
+                showNotification(`Mounted ${changedFiles.length} files to WebContainer`, 'info', 3000);
+              }
+            })
+            .catch((error) => {
+              console.error("Error mounting files after file tree change:", error);
+              showNotification(`Error updating files in WebContainer: ${error.message}`, 'error', 10000);
+            });
+        }, 300); // 300ms debounce
+        
+        // Clean up the timeout if the component unmounts or fileTree changes again
+        return () => clearTimeout(timeoutId);
+      } else {
+        console.log("No changed files to mount to WebContainer");
+      }
+    }
+  }, [fileTree, webContainer, webContainerStatus, showNotification, mountFilesToWebContainer]);
+
+  // Add a function to save file changes that also updates the WebContainer
   const saveFileChanges = useCallback((file) => {
     if (!file || !file.hasUnsavedChanges) return;
     
@@ -501,7 +903,16 @@ const Project = () => {
       setOpenFiles(prev => 
         prev.map(f => 
           f.filename === file.filename 
-            ? { ...f, hasUnsavedChanges: false } 
+            ? { ...f, hasUnsavedChanges: false, mountedToWebContainer: true } 
+            : f
+        )
+      );
+      
+      // Update the file tree to mark the file as saved
+      setFileTree(prev => 
+        prev.map(f => 
+          f.filename === file.filename 
+            ? { ...f, hasUnsavedChanges: false, mountedToWebContainer: true } 
             : f
         )
       );
@@ -509,28 +920,41 @@ const Project = () => {
       if (CurrentFile && CurrentFile.filename === file.filename) {
         setCurrentFile(prev => ({
           ...prev,
-          hasUnsavedChanges: false
+          hasUnsavedChanges: false,
+          mountedToWebContainer: true
         }));
       }
       
+      // Update the file in WebContainer if it's initialized
+      if (webContainerStatus === 'initialized' && webContainer) {
+        // Create a mini file tree with just this file
+        const singleFileTree = [{
+          filename: file.filename,
+          content: file.content,
+          isSymlink: file.isSymlink,
+          symlink: file.symlink,
+          mountedToWebContainer: true // Mark as already mounted
+        }];
+        
+        mountFilesToWebContainer(webContainer, singleFileTree)
+          .then(() => {
+            console.log(`File ${file.filename} updated in WebContainer`);
+          })
+          .catch((error) => {
+            console.error(`Error updating file in WebContainer: ${error.message}`);
+          });
+      }
+      
       // Show a save confirmation
-      const el = document.createElement('div');
-      el.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
-      el.textContent = `${file.filename} saved successfully!`;
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), 2000);
+      showNotification(`${file.filename} saved successfully!`, 'success');
     })
     .catch(error => {
       console.error('Error saving file:', error);
       
       // Show an error notification
-      const el = document.createElement('div');
-      el.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50';
-      el.textContent = `Error saving ${file.filename}. Please try again.`;
-      document.body.appendChild(el);
-      setTimeout(() => el.remove(), 3000);
+      showNotification(`Error saving ${file.filename}. Please try again.`, 'error', 10000);
     });
-  }, [CurrentFile, projectId]);
+  }, [CurrentFile, projectId, webContainer, webContainerStatus, showNotification]);
 
   // Add a function to save all files with unsaved changes
   const saveAllChanges = useCallback(() => {
@@ -555,34 +979,47 @@ const Project = () => {
         
         // Update the UI to show all files are saved
         setOpenFiles(prev => 
-          prev.map(file => ({ ...file, hasUnsavedChanges: false }))
+          prev.map(file => ({ ...file, hasUnsavedChanges: false, mountedToWebContainer: true }))
         );
         
         if (CurrentFile) {
           setCurrentFile(prev => ({
             ...prev,
-            hasUnsavedChanges: false
+            hasUnsavedChanges: false,
+            mountedToWebContainer: true
           }));
         }
         
+        // Update the files in WebContainer if it's initialized
+        if (webContainerStatus === 'initialized' && webContainer) {
+          // Create a file tree with just the saved files
+          const savedFilesTree = unsavedFiles.map(file => ({
+            filename: file.filename,
+            content: file.content,
+            isSymlink: file.isSymlink,
+            symlink: file.symlink
+          }));
+          
+          mountFilesToWebContainer(webContainer, savedFilesTree)
+            .then(() => {
+              console.log('All files updated in WebContainer');
+            })
+            .catch((error) => {
+              console.error(`Error updating files in WebContainer: ${error.message}`);
+              showNotification(`Error updating files in WebContainer: ${error.message}`, 'warning', 5000);
+            });
+        }
+        
         // Show a save confirmation
-        const el = document.createElement('div');
-        el.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
-        el.textContent = `All files saved successfully!`;
-        document.body.appendChild(el);
-        setTimeout(() => el.remove(), 2000);
+        showNotification('All files saved successfully!', 'success');
       })
       .catch(error => {
         console.error('Error saving files:', error);
         
         // Show an error notification
-        const el = document.createElement('div');
-        el.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50';
-        el.textContent = `Error saving files. Please try again.`;
-        document.body.appendChild(el);
-        setTimeout(() => el.remove(), 3000);
+        showNotification('Error saving files. Please try again.', 'error', 10000);
       });
-  }, [openFiles, CurrentFile, projectId]);
+  }, [openFiles, CurrentFile, projectId, webContainer, webContainerStatus, showNotification]);
 
   // Add keyboard shortcut for saving (Ctrl+S)
   useEffect(() => {
@@ -616,12 +1053,324 @@ const Project = () => {
     };
   }, [saveAllChanges]);
 
+  // Function to retry WebContainer initialization - now just calls the shared function
+  const retryWebContainerInit = useCallback(() => {
+    if (webContainerStatus === 'error' || webContainerStatus === 'not-initialized') {
+      initializeWebContainerWithNotifications();
+    }
+  }, [webContainerStatus, initializeWebContainerWithNotifications]);
+
+  // Run a command in the WebContainer
+  const runCommand = useCallback(async (command) => {
+    if (!webContainer || webContainerStatus !== 'initialized') {
+      showNotification('WebContainer is not initialized. Please wait...', 'warning');
+      return;
+    }
+    
+    try {
+      // Get the active terminal
+      const activeTerminal = terminals.find(t => t.id === activeTerminalId);
+      if (!activeTerminal) return;
+      
+      // Update the terminal state to show it's loading and add the command to output
+      setTerminals(prev => prev.map(terminal => 
+        terminal.id === activeTerminalId 
+          ? {
+              ...terminal,
+              isLoading: true,
+              output: [...terminal.output, { type: 'command', content: command }],
+              command: '' // Clear the command input
+            }
+          : terminal
+      ));
+      
+      // Run the command
+      const shellProcess = await webContainer.spawn('sh', ['-c', command]);
+      
+      // Store the process in the terminal state
+      setTerminals(prev => prev.map(terminal => 
+        terminal.id === activeTerminalId 
+          ? { ...terminal, process: shellProcess }
+          : terminal
+      ));
+      
+      // Listen for output
+      shellProcess.output.pipeTo(new WritableStream({
+        write(data) {
+          setTerminals(prev => prev.map(terminal => 
+            terminal.id === activeTerminalId 
+              ? { ...terminal, output: [...terminal.output, { type: 'output', content: data }] }
+              : terminal
+          ));
+          
+          // Scroll to bottom
+          const terminalOutputEl = terminalRefs.current[activeTerminalId];
+          if (terminalOutputEl) {
+            terminalOutputEl.scrollTop = terminalOutputEl.scrollHeight;
+          }
+        }
+      }));
+      
+      // Wait for the command to complete
+      const exitCode = await shellProcess.exit;
+      
+      // Add exit code to terminal output
+      setTerminals(prev => prev.map(terminal => 
+        terminal.id === activeTerminalId 
+          ? { 
+              ...terminal, 
+              isLoading: false,
+              output: [...terminal.output, { type: 'system', content: `Command exited with code ${exitCode}` }] 
+            }
+          : terminal
+      ));
+      
+      // Scroll terminal to bottom
+      const terminalOutputEl = terminalRefs.current[activeTerminalId];
+      if (terminalOutputEl) {
+        terminalOutputEl.scrollTop = terminalOutputEl.scrollHeight;
+      }
+    } catch (error) {
+      console.error('Error running command:', error);
+      
+      // Add error to terminal output
+      setTerminals(prev => prev.map(terminal => 
+        terminal.id === activeTerminalId 
+          ? { 
+              ...terminal, 
+              isLoading: false,
+              output: [...terminal.output, { type: 'error', content: `Error: ${error.message}` }] 
+            }
+          : terminal
+      ));
+      
+      showNotification(`Error running command: ${error.message}`, 'error');
+    }
+  }, [webContainer, webContainerStatus, showNotification, terminals, activeTerminalId]);
+
+  // Function to start the development server
+  const startServer = useCallback(async () => {
+    if (!webContainer || webContainerStatus !== 'initialized') {
+      showNotification('WebContainer is not initialized. Please wait...', 'warning');
+      return;
+    }
+    
+    try {
+      showNotification('Starting development server...', 'info');
+      setIsServerRunning(true);
+      
+      // Get the active terminal or create one if none exists
+      let activeTerminal = terminals.find(t => t.id === activeTerminalId);
+      if (!activeTerminal) {
+        // Create a new terminal directly instead of calling createTerminal
+        const newId = `terminal-${terminals.length + 1}`;
+        const newTerminal = {
+          id: newId,
+          name: `Terminal ${terminals.length + 1}`,
+          output: [],
+          command: '',
+          isLoading: false,
+          process: null
+        };
+        
+        setTerminals(prev => [...prev, newTerminal]);
+        setActiveTerminalId(newId);
+        terminalRefs.current[newId] = null;
+        
+        activeTerminal = newTerminal;
+      }
+      
+      // Make sure the terminal is visible
+      setTerminalVisible(true);
+      
+      // Add terminal output for better visibility
+      setTerminals(prev => prev.map(terminal => 
+        terminal.id === activeTerminalId
+          ? {
+              ...terminal,
+              output: [
+                ...terminal.output,
+                { type: 'system', content: '--- Starting development server ---' },
+                { type: 'command', content: 'npm run dev' }
+              ]
+            }
+          : terminal
+      ));
+      
+      const url = await startDevServer(webContainer);
+      
+      setServerUrl(url);
+      setPreviewUrl(url);
+      setPreviewVisible(true);
+      
+      // Add server URL to terminal output
+      setTerminals(prev => prev.map(terminal => 
+        terminal.id === activeTerminalId
+          ? {
+              ...terminal,
+              output: [
+                ...terminal.output,
+                { type: 'system', content: `Server started at: ${url}` }
+              ]
+            }
+          : terminal
+      ));
+      
+      showNotification(`Development server started at ${url}`, 'success');
+    } catch (error) {
+      console.error('Error starting server:', error);
+      setIsServerRunning(false);
+      
+      // Add error to terminal output
+      setTerminals(prev => prev.map(terminal => 
+        terminal.id === activeTerminalId
+          ? {
+              ...terminal,
+              output: [
+                ...terminal.output,
+                { type: 'error', content: `Error starting server: ${error.message}` }
+              ]
+            }
+          : terminal
+      ));
+      
+      showNotification(`Error starting server: ${error.message}`, 'error');
+    }
+    
+    // Scroll terminal to bottom
+    const terminalOutputEl = terminalRefs.current[activeTerminalId];
+    if (terminalOutputEl) {
+      terminalOutputEl.scrollTop = terminalOutputEl.scrollHeight;
+    }
+  }, [webContainer, webContainerStatus, showNotification, terminals, activeTerminalId]);
+  
+  // Check for server URL on WebContainer initialization
+  useEffect(() => {
+    if (webContainerStatus === 'initialized' && webContainer) {
+      const url = getServerUrl();
+      if (url) {
+        setServerUrl(url);
+        setPreviewUrl(url);
+        setIsServerRunning(true);
+      }
+    }
+  }, [webContainerStatus, webContainer]);
+
+  // Function to switch to a specific terminal
+  const switchToTerminal = useCallback((terminalId) => {
+    setActiveTerminalId(terminalId);
+  }, []);
+
+  // Function to close a terminal
+  const closeTerminal = useCallback((terminalId) => {
+    // Don't allow closing the last terminal
+    if (terminals.length <= 1) {
+      return;
+    }
+    
+    // If closing the active terminal, switch to another one
+    if (terminalId === activeTerminalId) {
+      const remainingTerminals = terminals.filter(t => t.id !== terminalId);
+      if (remainingTerminals.length > 0) {
+        setActiveTerminalId(remainingTerminals[0].id);
+      }
+    }
+    
+    // Remove the terminal
+    setTerminals(prev => prev.filter(t => t.id !== terminalId));
+    
+    // Clean up the ref
+    delete terminalRefs.current[terminalId];
+  }, [terminals, activeTerminalId]);
+
+  // Function to rename a terminal
+  const renameTerminal = useCallback((terminalId, newName) => {
+    if (!newName.trim()) return;
+    
+    setTerminals(prev => prev.map(terminal => 
+      terminal.id === terminalId
+        ? { ...terminal, name: newName.trim() }
+        : terminal
+    ));
+  }, []);
+
+  // Add keyboard shortcuts for terminal operations
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Ctrl+` to toggle terminal visibility
+      if (e.ctrlKey && e.key === '`') {
+        setTerminalVisible(prev => !prev);
+      }
+      
+      // Ctrl+Shift+` to create a new terminal
+      if (e.ctrlKey && e.shiftKey && e.key === '`') {
+        // Create a new terminal directly instead of calling createTerminal
+        const newId = `terminal-${terminals.length + 1}`;
+        const newTerminal = {
+          id: newId,
+          name: `Terminal ${terminals.length + 1}`,
+          output: [],
+          command: '',
+          isLoading: false,
+          process: null
+        };
+        
+        setTerminals(prev => [...prev, newTerminal]);
+        setActiveTerminalId(newId);
+        terminalRefs.current[newId] = null;
+        setTerminalVisible(true);
+      }
+      
+      // Ctrl+Shift+W to close the current terminal
+      if (e.ctrlKey && e.shiftKey && e.key === 'w') {
+        closeTerminal(activeTerminalId);
+      }
+      
+      // Ctrl+L to clear the current terminal (like in bash/zsh)
+      if (e.ctrlKey && e.key === 'l' && terminalVisible) {
+        // Clear terminal output directly instead of calling clearTerminal
+        setTerminals(prev => prev.map(terminal => 
+          terminal.id === activeTerminalId
+            ? { ...terminal, output: [{ type: 'system', content: 'Terminal cleared' }] }
+            : terminal
+        ));
+        e.preventDefault(); // Prevent browser's "select address bar" action
+      }
+      
+      // Alt+1, Alt+2, etc. to switch between terminals
+      if (e.altKey && /^[1-9]$/.test(e.key)) {
+        const index = parseInt(e.key) - 1;
+        if (index < terminals.length) {
+          switchToTerminal(terminals[index].id);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [setTerminalVisible, closeTerminal, switchToTerminal, terminals, activeTerminalId, terminalVisible]);
+
   if (!user) {
     return <div>Loading user data...</div>;
   }
 
   return (
     <main className="h-screen w-screen flex">
+      {/* Add a style tag for SVG icons */}
+      <style jsx="true">{`
+        svg {
+          display: inline-block;
+          vertical-align: middle;
+          fill: currentColor;
+        }
+        .terminal-button svg,
+        .preview-button svg {
+          stroke: currentColor;
+          stroke-width: 2;
+          fill: none;
+        }
+      `}</style>
+      
       {/* Left Side */}
       <section
         className="left relative flex flex-col h-full bg-slate-700"
@@ -629,7 +1378,8 @@ const Project = () => {
       >
         {/* Project Header */}
         <header className="flex items-center justify-between p-4 w-full bg-slate-200">
-          <h1 className="text-2xl font-bold">{location.state.name}</h1>
+          <h1 className="text-2xl font-bold">{location.state?.name || 'Project'}</h1>
+          <div className="flex items-center">
           <button
             onClick={() => setIsModalOpen(true)}
             className="text-2xl font-bold ml-auto mr-2"
@@ -642,6 +1392,7 @@ const Project = () => {
           >
             <i className="ri-group-fill"></i>
           </button>
+          </div>
         </header>
 
         {/* Conversation Area */}
@@ -828,13 +1579,36 @@ const Project = () => {
                                 key={currentPath}
                                 className="file-item flex items-center py-1 hover:bg-slate-300 cursor-pointer"
                                 style={{ paddingLeft: `${paddingLeft}px` }}
-                                onClick={() => {
-                                  // Add file to openFiles if not already there
-                                  if (!openFiles.some(f => f.filename === item.data.filename)) {
-                                    setOpenFiles(prev => [...prev, item.data]);
+                    onClick={() => {
+                                  // Check if the file already exists in the file tree
+                                  const existingFile = fileTree.find(f => f.filename === item.data.filename);
+                                  
+                                  if (existingFile) {
+                                    // If it exists, use that version instead of the one from the message
+                                    // This prevents overwriting any changes the user might have made
+                                    if (!openFiles.some(f => f.filename === item.data.filename)) {
+                                      setOpenFiles(prev => [...prev, existingFile]);
+                                    }
+                                    setCurrentFile(existingFile);
+                                  } else {
+                                    // If it doesn't exist, add it to the file tree first with proper flags
+                                    const newFile = {
+                                      ...item.data,
+                                      hasUnsavedChanges: true,
+                                      mountedToWebContainer: false
+                                    };
+                                    
+                                    // Add to file tree
+                                    setFileTree(prev => [...prev, newFile]);
+                                    
+                                    // Add to open files
+                                    if (!openFiles.some(f => f.filename === item.data.filename)) {
+                                      setOpenFiles(prev => [...prev, newFile]);
+                                    }
+                                    
+                                    // Set as current file
+                                    setCurrentFile(newFile);
                                   }
-                                  // Set as current file
-                                  setCurrentFile(item.data);
                                 }}
                               >
                                 {item.data.isSymlink ? (
@@ -843,7 +1617,7 @@ const Project = () => {
                                   <i className="ri-file-fill mr-1 text-blue-600"></i>
                                 )}
                                 <span className="text-sm">{name}</span>
-                              </div>
+              </div>
                             );
                           }
                           return null;
@@ -866,18 +1640,18 @@ const Project = () => {
           <div className="code-editor w-4/5 h-full bg-slate-100 overflow-hidden flex flex-col">
             <div className="code-editor-header p-2 border-b flex items-center">
               <div className="flex-grow overflow-x-auto whitespace-nowrap">
-                {openFiles.map((file, index) => (
+              {openFiles.map((file, index) => (
                   <div
-                    key={index}
-                    className={`file-tree-item inline-block cursor-pointer p-1 mx-1 border border-black rounded ${
-                      CurrentFile && CurrentFile.filename === file.filename
-                        ? "bg-slate-400 text-white font-semibold"
-                        : "bg-slate-200 hover:bg-slate-300"
-                    }`}
-                    onClick={() => {
-                      setCurrentFile(file);
-                    }}
-                  >
+                  key={index}
+                  className={`file-tree-item inline-block cursor-pointer p-1 mx-1 border border-black rounded ${
+                    CurrentFile && CurrentFile.filename === file.filename
+                      ? "bg-slate-400 text-white font-semibold"
+                      : "bg-slate-200 hover:bg-slate-300"
+                  }`}
+                  onClick={() => {
+                    setCurrentFile(file);
+                  }}
+                >
                     <div className="flex items-center">
                       <h1 className="font-bold text-sm">
                         {file.filename}
@@ -890,7 +1664,6 @@ const Project = () => {
                           handleCloseFile(file.filename);
                         }}
                         title="Close file"
-                        role="button"
                         tabIndex={0}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -963,6 +1736,268 @@ const Project = () => {
                 </div>
               )}
             </div>
+
+            {/* Terminal and Preview Buttons */}
+            <div className="absolute bottom-4 right-4 flex space-x-2 z-50">
+              {/* Terminal Button */}
+              <div className="fixed bottom-4 right-4 z-40">
+                <button
+                  className={`terminal-button w-12 h-12 rounded-full shadow-xl flex items-center justify-center ${
+                    terminalVisible ? 'bg-green-600 hover:bg-green-700' : 'bg-gray-800 hover:bg-gray-700'
+                  } text-white focus:outline-none border-2 border-gray-600`}
+                  onClick={() => setTerminalVisible(!terminalVisible)}
+                  title={terminalVisible ? "Hide Terminal" : "Show Terminal"}
+                >
+                  <div className="relative">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 9l3 3-3 3m5 0h3" />
+                    </svg>
+                    {terminals.length > 1 && (
+                      <span className="absolute -top-2 -right-2 bg-blue-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {terminals.length}
+                      </span>
+                    )}
+                  </div>
+                </button>
+              </div>
+              
+              <button
+                className={`preview-button p-2 rounded-full shadow-xl ${isServerRunning ? 'bg-green-600 hover:bg-green-700 border-2 border-green-500' : 'bg-blue-600 hover:bg-blue-700 border-2 border-blue-500'} text-white flex items-center justify-center`}
+                onClick={() => {
+                  if (isServerRunning) {
+                    setPreviewVisible(!previewVisible);
+                  } else {
+                    startServer();
+                  }
+                }}
+                title={isServerRunning ? (previewVisible ? "Hide Preview" : "Show Preview") : "Start Server"}
+                style={{ width: '44px', height: '44px' }}
+              >
+                {/* Simpler globe/server icon */}
+                <svg viewBox="0 0 24 24" width="24" height="24" stroke="currentColor" strokeWidth="2" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+              </button>
+            </div>
+            
+            {/* Terminal */}
+            {terminalVisible && (
+              <div className="terminal-container fixed bottom-4 right-4 w-2/3 h-2/5 bg-gray-900 text-white rounded-lg shadow-2xl flex flex-col overflow-hidden z-50 border-2 border-gray-600">
+                {/* Terminal header with tabs */}
+                <div className="terminal-header flex items-center justify-between bg-gray-800 p-2 border-b border-gray-700">
+                  <div className="terminal-tabs flex space-x-1 overflow-x-auto flex-grow">
+                    {terminals.map(terminal => (
+                      <div 
+                        key={terminal.id}
+                        className={`terminal-tab flex items-center px-3 py-1 rounded-t cursor-pointer ${
+                          terminal.id === activeTerminalId 
+                            ? 'bg-gray-900 text-white' 
+                            : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                        }`}
+                        onClick={() => switchToTerminal(terminal.id)}
+                      >
+                        <span 
+                          className="mr-2"
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            const newName = prompt('Enter new terminal name:', terminal.name);
+                            if (newName) {
+                              renameTerminal(terminal.id, newName);
+                            }
+                          }}
+                          title="Double-click to rename"
+                        >
+                          {terminal.name}
+                        </span>
+                        {terminals.length > 1 && (
+                          <button
+                            className="text-gray-400 hover:text-white focus:outline-none"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              closeTerminal(terminal.id);
+                            }}
+                            title="Close terminal"
+                          >
+                            ×
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    <button
+                      className="new-terminal-btn px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded text-gray-300 hover:text-white"
+                      onClick={() => {
+                        // Create a new terminal directly
+                        const newId = `terminal-${terminals.length + 1}`;
+                        const newTerminal = {
+                          id: newId,
+                          name: `Terminal ${terminals.length + 1}`,
+                          output: [],
+                          command: '',
+                          isLoading: false,
+                          process: null
+                        };
+                        
+                        setTerminals(prev => [...prev, newTerminal]);
+                        setActiveTerminalId(newId);
+                        terminalRefs.current[newId] = null;
+                      }}
+                      title="New terminal"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div className="terminal-controls flex space-x-2">
+                    <button
+                      className="terminal-control p-1 hover:bg-gray-700 rounded"
+                      onClick={() => {
+                        // Clear terminal output directly
+                        setTerminals(prev => prev.map(terminal => 
+                          terminal.id === activeTerminalId
+                            ? { ...terminal, output: [{ type: 'system', content: 'Terminal cleared' }] }
+                            : terminal
+                        ));
+                      }}
+                      title="Clear terminal"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                    <button
+                      className="terminal-control p-1 hover:bg-gray-700 rounded"
+                      onClick={() => {
+                        showNotification(
+                          <div>
+                            <div className="font-bold mb-1">Terminal Keyboard Shortcuts:</div>
+                            <div>Ctrl+` - Toggle terminal visibility</div>
+                            <div>Ctrl+Shift+` - Create new terminal</div>
+                            <div>Ctrl+Shift+W - Close current terminal</div>
+                            <div>Ctrl+L - Clear current terminal</div>
+                            <div>Alt+1, Alt+2, etc. - Switch between terminals</div>
+                            <div className="mt-2 font-bold">Tips:</div>
+                            <div>Double-click on terminal name to rename it</div>
+                            <div>Click the + button to create a new terminal</div>
+                            <div>Use the trash icon to clear terminal output</div>
+                          </div>,
+                          'info',
+                          10000
+                        );
+                      }}
+                      title="Keyboard shortcuts"
+                    >
+                      ?
+                    </button>
+                    <button
+                      className="terminal-control p-1 hover:bg-gray-700 rounded"
+                      onClick={() => setTerminalVisible(false)}
+                      title="Hide terminal"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Terminal content */}
+                <div className="terminal-content flex-grow flex flex-col overflow-hidden">
+                  {/* Terminal output */}
+                  <div 
+                    ref={el => terminalRefs.current[activeTerminalId] = el}
+                    className="terminal-output flex-grow p-2 overflow-y-auto font-mono text-sm"
+                    style={{ zIndex: 51 }}
+                  >
+                    {terminals.find(terminal => terminal.id === activeTerminalId)?.output.map((line, index) => (
+                      <div key={index} className={`mb-1 ${
+                        line.type === 'command' ? 'text-green-400' : 
+                        line.type === 'error' ? 'text-red-400' : 
+                        line.type === 'system' ? 'text-yellow-400' : 'text-white'
+                      }`}>
+                        {line.type === 'command' ? `$ ${line.content}` : line.content}
+                      </div>
+                    ))}
+                    {terminals.find(terminal => terminal.id === activeTerminalId)?.isLoading && (
+                      <div className="loading-indicator text-yellow-400">
+                        Processing...
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Terminal input */}
+                  <div className="terminal-input flex items-center p-2 border-t border-gray-700">
+                    <span className="text-green-400 mr-2">$</span>
+                    <input
+                      type="text"
+                      className="flex-grow bg-transparent border-none outline-none text-white font-mono"
+                      value={terminals.find(terminal => terminal.id === activeTerminalId)?.command || ''}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setTerminals(prev => prev.map(terminal => 
+                          terminal.id === activeTerminalId 
+                            ? { ...terminal, command: value }
+                            : terminal
+                        ));
+                      }}
+                      onKeyDown={(e) => {
+                        const activeTerminal = terminals.find(terminal => terminal.id === activeTerminalId);
+                        if (e.key === 'Enter' && activeTerminal?.command.trim() && !activeTerminal?.isLoading) {
+                          runCommand(activeTerminal.command.trim());
+                        }
+                      }}
+                      placeholder={terminals.find(terminal => terminal.id === activeTerminalId)?.isLoading ? "Command running..." : "Enter command..."}
+                      disabled={terminals.find(terminal => terminal.id === activeTerminalId)?.isLoading}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {/* Preview */}
+            {previewVisible && previewUrl && (
+              <div className="preview-container absolute top-16 right-4 w-2/3 h-2/3 bg-white rounded-lg shadow-lg overflow-hidden flex flex-col z-40">
+                <div className="preview-header bg-gray-800 p-2 flex justify-between items-center">
+                  <span className="font-mono text-sm text-white flex items-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
+                    </svg>
+                    {previewUrl}
+                  </span>
+                  <div className="flex items-center">
+                    <button
+                      className="text-gray-400 hover:text-white mr-2"
+                      onClick={() => {
+                        // Open in new tab
+                        window.open(previewUrl, '_blank');
+                      }}
+                      title="Open in new tab"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M11 3a1 1 0 100 2h2.586l-6.293 6.293a1 1 0 101.414 1.414L15 6.414V9a1 1 0 102 0V4a1 1 0 00-1-1h-5z" />
+                        <path d="M5 5a2 2 0 00-2 2v8a2 2 0 002 2h8a2 2 0 002-2v-3a1 1 0 10-2 0v3H5z" />
+                      </svg>
+                    </button>
+                    <button
+                      className="text-gray-400 hover:text-white"
+                      onClick={() => setPreviewVisible(false)}
+                      title="Close preview"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+                <div className="preview-content flex-grow">
+                  <iframe
+                    src={previewUrl}
+                    title="WebContainer Preview"
+                    className="w-full h-full border-none"
+                    sandbox="allow-forms allow-modals allow-pointer-lock allow-popups allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
+                    allow="accelerometer; camera; encrypted-media; geolocation; gyroscope; microphone; midi; payment; usb; xr-spatial-tracking"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </section>
