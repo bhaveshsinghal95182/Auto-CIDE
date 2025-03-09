@@ -5,7 +5,7 @@ let webContainerInstance = null;
 
 export const initializeWebContainer = async () => {
     if (!webContainerInstance) {
-        webContainerInstance = await WebContainer.create();
+        webContainerInstance = await WebContainer.boot();
     }
     return webContainerInstance;
 }

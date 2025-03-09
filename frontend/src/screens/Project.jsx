@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useRef, useCallback } from "react";
+import React, { useState, useEffect, useContext, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "../config/axios";
 import {
@@ -10,26 +10,38 @@ import {
 import UserContext from "../context/user.context";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import Editor from "@monaco-editor/react";
 
 const Project = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user } = useContext(UserContext);
+
+  // Users
   const [users, setUsers] = useState([]);
   const [sidePanel, setSidePanel] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedUserId, setSelectedUserId] = useState([]);
+
+  // Project
   const [project, setProject] = useState(null);
   const [projectId, setProjectId] = useState(location.state._id);
+
+  // Messages
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([]);
   const messageBoxRef = useRef(null);
   const [messageBoxWidth, setMessageBoxWidth] = useState(20);
   const [isResizing, setIsResizing] = useState(false);
+
+  // File Tree
   const [fileTree, setFileTree] = useState([]);
   const [CurrentFile, setCurrentFile] = useState(null);
   const [openFiles, setOpenFiles] = useState([]);
 
+  // Web Containers
+  const [webContainer, setWebContainer] = useState([]);
+  
   // First useEffect to handle user authentication
   useEffect(() => {
     if (!user) {
@@ -242,6 +254,23 @@ const Project = () => {
     });
   }, []);
 
+  // Helper function to prepare message with context if needed
+  const prepareMessageWithContext = useCallback((message) => {
+    if (message.includes("@ai")) {
+      // Only include essential file information to keep the context smaller
+      const essentialFileInfo = fileTree.map(file => ({
+        filename: file.filename,
+        language: file.language,
+        isSymlink: file.isSymlink,
+        // Include only a preview of content (first 100 chars) to reduce size
+        contentPreview: file.content?.substring(0, 100) + (file.content?.length > 100 ? '...' : '')
+      }));
+      
+      return message + `\nfilecontext: ${JSON.stringify(essentialFileInfo)}`;
+    }
+    return message;
+  }, [fileTree]);
+
   // Now define sendSomeMessage which depends on addMessage
   const sendSomeMessage = useCallback((message) => {
     if (!user) {
@@ -254,15 +283,23 @@ const Project = () => {
       return;
     }
 
+    // Create a copy of the message for display
+    const displayMessage = message;
+    
+    // Prepare the message with context for the server
+    const serverMessage = prepareMessageWithContext(message);
+
+    // Send the message with context to the server
     sendMessage("project-message", {
-      message: message,
+      message: serverMessage,
       sender: user.email,
       projectId: projectId,
     });
 
+    // Add the original message (without context) to the UI
     addMessage(
       {
-        message: message,
+        message: displayMessage,
         sender: user.email,
         projectId: projectId,
       },
@@ -270,7 +307,7 @@ const Project = () => {
     );
 
     setMessage("");
-  }, [user, projectId, addMessage]);
+  }, [user, projectId, addMessage, prepareMessageWithContext]);
 
   const scrollToBottom = useCallback(() => {
     if (messageBoxRef.current) {
@@ -422,6 +459,17 @@ const Project = () => {
 
   // Memoize the file closing function
   const handleCloseFile = useCallback((filename) => {
+    // Find the file to check if it has unsaved changes
+    const fileToClose = openFiles.find(f => f.filename === filename);
+    
+    // If the file has unsaved changes, confirm before closing
+    if (fileToClose && fileToClose.hasUnsavedChanges) {
+      const confirmClose = window.confirm(`${filename} has unsaved changes. Close anyway?`);
+      if (!confirmClose) {
+        return; // Don't close if the user cancels
+      }
+    }
+    
     setOpenFiles(prev => {
       const remainingFiles = prev.filter(f => f.filename !== filename);
       
@@ -432,7 +480,141 @@ const Project = () => {
       
       return remainingFiles;
     });
-  }, [CurrentFile]);
+  }, [CurrentFile, openFiles]);
+
+  // Add a function to save file changes
+  const saveFileChanges = useCallback((file) => {
+    if (!file || !file.hasUnsavedChanges) return;
+    
+    console.log(`Saving changes to ${file.filename}`);
+    
+    // Send the updated file content to the backend
+    axios.post('/api/files/save', {
+      projectId,
+      filename: file.filename,
+      content: file.content
+    })
+    .then(response => {
+      console.log('File saved successfully:', response.data);
+      
+      // Update the UI to show it's saved
+      setOpenFiles(prev => 
+        prev.map(f => 
+          f.filename === file.filename 
+            ? { ...f, hasUnsavedChanges: false } 
+            : f
+        )
+      );
+      
+      if (CurrentFile && CurrentFile.filename === file.filename) {
+        setCurrentFile(prev => ({
+          ...prev,
+          hasUnsavedChanges: false
+        }));
+      }
+      
+      // Show a save confirmation
+      const el = document.createElement('div');
+      el.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+      el.textContent = `${file.filename} saved successfully!`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 2000);
+    })
+    .catch(error => {
+      console.error('Error saving file:', error);
+      
+      // Show an error notification
+      const el = document.createElement('div');
+      el.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50';
+      el.textContent = `Error saving ${file.filename}. Please try again.`;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    });
+  }, [CurrentFile, projectId]);
+
+  // Add a function to save all files with unsaved changes
+  const saveAllChanges = useCallback(() => {
+    // Get all files with unsaved changes
+    const unsavedFiles = openFiles.filter(file => file.hasUnsavedChanges);
+    
+    if (unsavedFiles.length === 0) return;
+    
+    // Create an array of promises for saving each file
+    const savePromises = unsavedFiles.map(file => {
+      return axios.post('/api/files/save', {
+        projectId,
+        filename: file.filename,
+        content: file.content
+      });
+    });
+    
+    // Wait for all files to be saved
+    Promise.all(savePromises)
+      .then(responses => {
+        console.log('All files saved successfully:', responses);
+        
+        // Update the UI to show all files are saved
+        setOpenFiles(prev => 
+          prev.map(file => ({ ...file, hasUnsavedChanges: false }))
+        );
+        
+        if (CurrentFile) {
+          setCurrentFile(prev => ({
+            ...prev,
+            hasUnsavedChanges: false
+          }));
+        }
+        
+        // Show a save confirmation
+        const el = document.createElement('div');
+        el.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+        el.textContent = `All files saved successfully!`;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 2000);
+      })
+      .catch(error => {
+        console.error('Error saving files:', error);
+        
+        // Show an error notification
+        const el = document.createElement('div');
+        el.className = 'fixed top-4 right-4 bg-red-500 text-white px-4 py-2 rounded shadow-lg z-50';
+        el.textContent = `Error saving files. Please try again.`;
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 3000);
+      });
+  }, [openFiles, CurrentFile, projectId]);
+
+  // Add keyboard shortcut for saving (Ctrl+S)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (CurrentFile) {
+          saveFileChanges(CurrentFile);
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [CurrentFile, saveFileChanges]);
+
+  // Add keyboard shortcut for saving all files (Ctrl+Shift+S)
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+        e.preventDefault();
+        saveAllChanges();
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [saveAllChanges]);
 
   if (!user) {
     return <div>Loading user data...</div>;
@@ -682,61 +864,102 @@ const Project = () => {
             </div>
           </div>
           <div className="code-editor w-4/5 h-full bg-slate-100 overflow-hidden flex flex-col">
-            <div className="code-editor-header p-2 border-b">
-              {openFiles.map((file, index) => (
-                <div
-                  key={index}
-                  className={`file-tree-item inline-block cursor-pointer p-1 mx-1 border border-black rounded ${
-                    CurrentFile && CurrentFile.filename === file.filename
-                      ? "bg-slate-400 text-white font-semibold"
-                      : "bg-slate-200 hover:bg-slate-300"
-                  }`}
-                  onClick={() => {
-                    setCurrentFile(file);
-                  }}
-                >
-                  <div className="flex items-center">
-                    <h1 className="font-bold text-sm">{file.filename}</h1>
-                    <div
-                      className="ml-2 text-xs hover:text-red-500 focus:outline-none rounded-full w-4 h-4 flex items-center justify-center hover:bg-red-100 cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation(); // Prevent triggering the parent div's onClick
-                        handleCloseFile(file.filename);
-                      }}
-                      title="Close file"
-                      role="button"
-                      tabIndex={0}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          e.stopPropagation();
+            <div className="code-editor-header p-2 border-b flex items-center">
+              <div className="flex-grow overflow-x-auto whitespace-nowrap">
+                {openFiles.map((file, index) => (
+                  <div
+                    key={index}
+                    className={`file-tree-item inline-block cursor-pointer p-1 mx-1 border border-black rounded ${
+                      CurrentFile && CurrentFile.filename === file.filename
+                        ? "bg-slate-400 text-white font-semibold"
+                        : "bg-slate-200 hover:bg-slate-300"
+                    }`}
+                    onClick={() => {
+                      setCurrentFile(file);
+                    }}
+                  >
+                    <div className="flex items-center">
+                      <h1 className="font-bold text-sm">
+                        {file.filename}
+                        {file.hasUnsavedChanges && <span className="ml-1 text-red-500">*</span>}
+                      </h1>
+                      <div
+                        className="ml-2 text-xs hover:text-red-500 focus:outline-none rounded-full w-4 h-4 flex items-center justify-center hover:bg-red-100 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation(); // Prevent triggering the parent div's onClick
                           handleCloseFile(file.filename);
-                        }
-                      }}
-                    >
-                      ✕
+                        }}
+                        title="Close file"
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleCloseFile(file.filename);
+                          }
+                        }}
+                      >
+                        ✕
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
+              <div className="flex items-center">
+                {CurrentFile && CurrentFile.hasUnsavedChanges && (
+                  <button
+                    className="ml-2 bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-sm"
+                    onClick={() => saveFileChanges(CurrentFile)}
+                    title="Save file (Ctrl+S)"
+                  >
+                    Save
+                  </button>
+                )}
+                {openFiles.some(file => file.hasUnsavedChanges) && (
+                  <button
+                    className="ml-2 bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-sm"
+                    onClick={saveAllChanges}
+                    title="Save all files (Ctrl+Shift+S)"
+                  >
+                    Save All
+                  </button>
+                )}
+              </div>
             </div>
             <div className="code-editor-body flex-grow overflow-hidden">
               {CurrentFile && (
                 <div className="code-editor-content h-full overflow-auto">
-                  <SyntaxHighlighter
+                  <Editor
+                    height="100%"
+                    width="100%"
                     language={CurrentFile.language}
-                    style={vscDarkPlus}
-                    customStyle={{
-                      height: "100%",
-                      width: "100%",
-                      margin: 0,
-                      padding: "1rem",
-                      borderRadius: 0,
-                      overflow: "auto",
+                    theme="vs-dark"
+                    value={CurrentFile.content}
+                    onChange={(value) => {
+                      // Update the file content in the openFiles array
+                      setOpenFiles(prev => 
+                        prev.map(file => 
+                          file.filename === CurrentFile.filename 
+                            ? { ...file, content: value, hasUnsavedChanges: true } 
+                            : file
+                        )
+                      );
+                      
+                      // Also update the CurrentFile
+                      setCurrentFile(prev => ({
+                        ...prev,
+                        content: value,
+                        hasUnsavedChanges: true
+                      }));
                     }}
-                  >
-                    {CurrentFile.content}
-                  </SyntaxHighlighter>
+                    options={{
+                      minimap: { enabled: true },
+                      scrollBeyondLastLine: false,
+                      fontSize: 14,
+                      automaticLayout: true,
+                    }}
+                  />
                 </div>
               )}
             </div>
