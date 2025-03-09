@@ -9,7 +9,7 @@ import {
 } from "../config/socket";
 import { 
   initializeWebContainer, 
-  mountFilesToWebContainer,
+  mountFilesToWebContainer as mountFilesToWebContainerOriginal,
   startDevServer,
   getServerUrl
 } from "../config/webContainer";
@@ -72,6 +72,14 @@ const Project = () => {
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewVisible, setPreviewVisible] = useState(false);
   
+  // Add a ref to store the current fileTree
+  const fileTreeRef = useRef([]);
+
+  // Update the ref whenever fileTree changes
+  useEffect(() => {
+    fileTreeRef.current = fileTree;
+  }, [fileTree]);
+
   // Function to detect language from filename
   const detectLanguageFromFilename = useCallback((filename) => {
     let language = 'text';
@@ -99,6 +107,11 @@ const Project = () => {
       language = extensionMap[extension.toLowerCase()] || 'text';
     }
     return language;
+  }, []);
+
+  // Memoize the mountFilesToWebContainer function to prevent unnecessary re-renders
+  const mountFilesToWebContainer = useCallback((container, files) => {
+    return mountFilesToWebContainerOriginal(container, files);
   }, []);
 
   // Check if we have valid project data on component mount
@@ -208,7 +221,9 @@ const Project = () => {
         console.log("Web container initialized");
         
         // Mount the file tree to the WebContainer
-        mountFilesToWebContainer(container, fileTree)
+        // Use the ref to access the current fileTree state
+        const currentFileTree = fileTreeRef.current;
+        mountFilesToWebContainer(container, currentFileTree)
           .then(() => {
             console.log("Files mounted to WebContainer");
           })
@@ -248,7 +263,7 @@ const Project = () => {
           ]
         );
       });
-  }, [showNotification, fileTree]);
+  }, [showNotification, mountFilesToWebContainer]);
 
   // Second useEffect to handle data fetching and socket initialization
   useEffect(() => {
@@ -279,7 +294,7 @@ const Project = () => {
       initializeWebContainerWithNotifications();
     }
 
-    // Existing project fetch
+    // Fetch project data
     axios
       .get(`/projects/get-project/${projectId}`)
       .then((res) => {
@@ -287,6 +302,28 @@ const Project = () => {
       })
       .catch((err) => {
         console.error("Error fetching project:", err);
+      });
+
+    // Fetch file tree data
+    axios
+      .get(`/filetree/${projectId}`)
+      .then((res) => {
+        // Convert the file tree data to our internal format
+        const processedFiles = Array.isArray(res.data) ? res.data.map(node => ({
+          filename: node.path,
+          content: node.content || '',
+          language: detectLanguageFromFilename(node.path),
+          isSymlink: false,
+          hasUnsavedChanges: false,
+          mountedToWebContainer: false,
+          _id: node._id // Store the node ID for future updates
+        })) : [];
+        
+        setFileTree(processedFiles);
+      })
+      .catch((err) => {
+        console.error("Error fetching file tree:", err);
+        showNotification("Error loading file tree", "error");
       });
 
     // Existing users fetch
@@ -325,7 +362,7 @@ const Project = () => {
         socketInstance.disconnect();
       }
     };
-  }, [projectId, user, navigate, initializeWebContainerWithNotifications, webContainerStatus]);
+  }, [projectId, user, navigate, webContainerStatus, detectLanguageFromFilename, showNotification]);
 
   // Helper function to merge new files with existing files
   const mergeFileTree = useCallback((newFiles, existingFiles) => {
@@ -890,12 +927,24 @@ const Project = () => {
     
     console.log(`Saving changes to ${file.filename}`);
     
-    // Send the updated file content to the backend
-    axios.post('/api/files/save', {
-      projectId,
-      filename: file.filename,
-      content: file.content
-    })
+    // Create the node data according to the new schema
+    const nodeData = {
+      name: file.filename.split('/').pop(), // Get just the filename without path
+      type: 'file',
+      path: file.filename,
+      content: file.content,
+      projectId: projectId
+    };
+    
+    // Check if this file already exists in the file tree
+    const existingFile = fileTree.find(f => f.filename === file.filename);
+    
+    // If the file exists, update it; otherwise, create a new one
+    const savePromise = existingFile && existingFile._id
+      ? axios.put(`/filetree/${projectId}/${existingFile._id}`, nodeData)
+      : axios.post(`/filetree/${projectId}`, nodeData);
+    
+    savePromise
     .then(response => {
       console.log('File saved successfully:', response.data);
       
@@ -903,25 +952,45 @@ const Project = () => {
       setOpenFiles(prev => 
         prev.map(f => 
           f.filename === file.filename 
-            ? { ...f, hasUnsavedChanges: false, mountedToWebContainer: true } 
+            ? { ...f, hasUnsavedChanges: false, mountedToWebContainer: true, _id: response.data._id } 
             : f
         )
       );
       
       // Update the file tree to mark the file as saved
-      setFileTree(prev => 
-        prev.map(f => 
-          f.filename === file.filename 
-            ? { ...f, hasUnsavedChanges: false, mountedToWebContainer: true } 
-            : f
-        )
-      );
+      setFileTree(prev => {
+        const fileIndex = prev.findIndex(f => f.filename === file.filename);
+        if (fileIndex >= 0) {
+          // Update existing file
+          const updatedTree = [...prev];
+          updatedTree[fileIndex] = { 
+            ...updatedTree[fileIndex], 
+            hasUnsavedChanges: false, 
+            mountedToWebContainer: true,
+            _id: response.data._id,
+            content: file.content
+          };
+          return updatedTree;
+        } else {
+          // Add new file to tree
+          return [...prev, { 
+            filename: file.filename, 
+            content: file.content,
+            language: detectLanguageFromFilename(file.filename),
+            isSymlink: false,
+            hasUnsavedChanges: false, 
+            mountedToWebContainer: true,
+            _id: response.data._id
+          }];
+        }
+      });
       
       if (CurrentFile && CurrentFile.filename === file.filename) {
         setCurrentFile(prev => ({
           ...prev,
           hasUnsavedChanges: false,
-          mountedToWebContainer: true
+          mountedToWebContainer: true,
+          _id: response.data._id
         }));
       }
       
@@ -954,7 +1023,7 @@ const Project = () => {
       // Show an error notification
       showNotification(`Error saving ${file.filename}. Please try again.`, 'error', 10000);
     });
-  }, [CurrentFile, projectId, webContainer, webContainerStatus, showNotification]);
+  }, [CurrentFile, projectId, webContainer, webContainerStatus, showNotification, fileTree, detectLanguageFromFilename, mountFilesToWebContainer]);
 
   // Add a function to save all files with unsaved changes
   const saveAllChanges = useCallback(() => {
@@ -965,11 +1034,21 @@ const Project = () => {
     
     // Create an array of promises for saving each file
     const savePromises = unsavedFiles.map(file => {
-      return axios.post('/api/files/save', {
-        projectId,
-        filename: file.filename,
-        content: file.content
-      });
+      const nodeData = {
+        name: file.filename.split('/').pop(), // Get just the filename without path
+        type: 'file',
+        path: file.filename,
+        content: file.content,
+        projectId: projectId
+      };
+      
+      // Check if this file already exists in the file tree
+      const existingFile = fileTree.find(f => f.filename === file.filename);
+      
+      // If the file exists, update it; otherwise, create a new one
+      return existingFile && existingFile._id
+        ? axios.put(`/filetree/${projectId}/${existingFile._id}`, nodeData)
+        : axios.post(`/filetree/${projectId}`, nodeData);
     });
     
     // Wait for all files to be saved
@@ -977,16 +1056,67 @@ const Project = () => {
       .then(responses => {
         console.log('All files saved successfully:', responses);
         
+        // Create a map of filename to response data for easy lookup
+        const responseMap = {};
+        responses.forEach((response, index) => {
+          responseMap[unsavedFiles[index].filename] = response.data;
+        });
+        
         // Update the UI to show all files are saved
         setOpenFiles(prev => 
-          prev.map(file => ({ ...file, hasUnsavedChanges: false, mountedToWebContainer: true }))
+          prev.map(file => {
+            const responseData = responseMap[file.filename];
+            return responseData 
+              ? { ...file, hasUnsavedChanges: false, mountedToWebContainer: true, _id: responseData._id }
+              : file;
+          })
         );
         
+        // Update the file tree
+        setFileTree(prev => {
+          const updatedTree = [...prev];
+          
+          // Update existing files and collect new files
+          const newFiles = [];
+          unsavedFiles.forEach(file => {
+            const responseData = responseMap[file.filename];
+            if (!responseData) return;
+            
+            const fileIndex = updatedTree.findIndex(f => f.filename === file.filename);
+            if (fileIndex >= 0) {
+              // Update existing file
+              updatedTree[fileIndex] = { 
+                ...updatedTree[fileIndex], 
+                hasUnsavedChanges: false, 
+                mountedToWebContainer: true,
+                _id: responseData._id,
+                content: file.content
+              };
+            } else {
+              // Add to new files array
+              newFiles.push({ 
+                filename: file.filename, 
+                content: file.content,
+                language: detectLanguageFromFilename(file.filename),
+                isSymlink: false,
+                hasUnsavedChanges: false, 
+                mountedToWebContainer: true,
+                _id: responseData._id
+              });
+            }
+          });
+          
+          // Return updated tree with new files
+          return [...updatedTree, ...newFiles];
+        });
+        
         if (CurrentFile) {
+          const responseData = responseMap[CurrentFile.filename];
           setCurrentFile(prev => ({
             ...prev,
             hasUnsavedChanges: false,
-            mountedToWebContainer: true
+            mountedToWebContainer: true,
+            _id: responseData ? responseData._id : prev._id
           }));
         }
         
@@ -1019,7 +1149,7 @@ const Project = () => {
         // Show an error notification
         showNotification('Error saving files. Please try again.', 'error', 10000);
       });
-  }, [openFiles, CurrentFile, projectId, webContainer, webContainerStatus, showNotification]);
+  }, [openFiles, CurrentFile, projectId, webContainer, webContainerStatus, showNotification, fileTree, detectLanguageFromFilename, mountFilesToWebContainer]);
 
   // Add keyboard shortcut for saving (Ctrl+S)
   useEffect(() => {

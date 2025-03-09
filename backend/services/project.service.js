@@ -1,5 +1,5 @@
-import projectModel from "../models/project.model.js";
-import mongoose, { get } from "mongoose";
+import Project  from "../models/project.model.js";
+import mongoose from "mongoose";
 
 export const createProject = async ({ name, userId }) => {
   if (!name) {
@@ -11,7 +11,7 @@ export const createProject = async ({ name, userId }) => {
 
   let project;
   try {
-    project = await projectModel.create({
+    project = await Project.create({
       name,
       users: [userId],
     });
@@ -28,7 +28,7 @@ export const createProject = async ({ name, userId }) => {
 export const getAllProjectsByUserID = async (UserID) => {
   if (!UserID) throw new "UserID is required"();
 
-  const allUserProjects = await projectModel.find({
+  const allUserProjects = await Project.find({
     users: UserID,
   });
 
@@ -55,7 +55,7 @@ export const addUserToProject = async ({ projectId, users, userId }) => {
     throw new Error("User ID must be a valid mongoose ID");
   }
 
-  const project = await projectModel.findOne({
+  const project = await Project.findOne({
     _id: projectId,
     users: userId,
   });
@@ -78,7 +78,7 @@ export const getProjectById = async (projectId) => {
   if (!mongoose.Types.ObjectId.isValid(projectId)) {
     throw new Error("Project ID must be a valid mongoose ID");
   }
-  const project = await projectModel.findOne({
+  const project = await Project.findOne({
     _id: projectId,
   }).populate("users");
 

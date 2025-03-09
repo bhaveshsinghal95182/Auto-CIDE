@@ -7,15 +7,17 @@ const projectSchema = new mongoose.Schema({
     unique: [true, "Project name must be unique"],
     lowercase: true,
   },
-
   users:[
     {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     }
-  ]
+  ],
+  fileTree: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'FileTreeNode'
+  }]
 });
-
 
 const Project = mongoose.model('Project', projectSchema);
 

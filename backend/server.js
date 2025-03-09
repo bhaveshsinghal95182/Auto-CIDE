@@ -4,7 +4,7 @@ import app from "./app.js";
 import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
-import projectModel from "./models/project.model.js";
+import Project  from "./models/project.model.js";
 import { generateResult } from "./services/ai.service.js";
 
 const port = process.env.PORT || 5000;
@@ -25,7 +25,7 @@ io.use(async (socket, next) => {
       return next(new Error("Invalid project ID"));
     }
 
-    socket.project = await projectModel.findById(projectId);
+    socket.project = await Project.findById(projectId);
 
     if (!token) {
       return next(new Error("No token provided"));
