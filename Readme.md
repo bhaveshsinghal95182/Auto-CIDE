@@ -49,22 +49,59 @@ Before you begin, ensure you have the following installed:
 
 ## Docker Deployment
 
-You can run the entire application (both frontend and backend) using a single Docker container:
+You can run the entire application (both frontend and backend) using Docker:
 
-### Build the Docker image
+### Option 1: One-Command Startup (Easiest)
+
+We've provided a script that handles everything for you:
+
 ```bash
-docker build -t auto-cide .
+./start-app.sh
 ```
 
-### Run the container
+This script will:
+- Check if Docker and Docker Compose are installed
+- Stop any existing containers
+- Build and start all services
+- Verify that everything is running correctly
+- Display access URLs
+
+### Option 2: Using Docker Compose
+
+This option automatically sets up both the application and MongoDB:
+
 ```bash
-docker run -p 3000:3000 -p 5000:5000 auto-cide
+docker-compose up --build
 ```
 
 This will:
-- Start both frontend and backend services in a single container
+- Build the application image
+- Start the application container
+- Start a MongoDB container
+- Set up the necessary network between them
 - Make the frontend available at `http://localhost:3000`
 - Make the backend API available at `http://localhost:5000`
+
+To run it in the background:
+
+```bash
+docker-compose up --build -d
+```
+
+To stop all services:
+
+```bash
+docker-compose down
+```
+
+### Option 3: Using Docker Only
+
+If you prefer to manage MongoDB separately:
+
+```bash
+docker build -t auto-cide .
+docker run -p 3000:3000 -p 5000:5000 auto-cide
+```
 
 > **Note**: Make sure you have Docker installed and running on your machine before executing these commands.
 
