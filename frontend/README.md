@@ -131,6 +131,42 @@ WebContainer requires Cross-Origin Isolation to be enabled, which means the foll
 
 These headers enable the use of `SharedArrayBuffer`, which is required by WebContainer.
 
+## ⌨️ Keyboard Shortcuts
+
+The application provides various keyboard shortcuts to enhance productivity:
+
+### Editor Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+S` | Save current file |
+| `Ctrl+Shift+S` | Save all files |
+
+### Terminal Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+`` | Toggle terminal visibility |
+| `Ctrl+Shift+`` | Create new terminal |
+| `Ctrl+Shift+W` | Close current terminal |
+| `Ctrl+L` | Clear current terminal |
+| `Alt+1`, `Alt+2`, etc. | Switch between terminals |
+
+### File Management
+
+| Shortcut | Description |
+|----------|-------------|
+| Double-click on terminal name | Rename terminal |
+| Click on file in explorer | Open file in editor |
+| Click on directory in explorer | Expand/collapse directory |
+
+### Other Tips
+
+- You can drag the resize handle between panels to adjust their sizes
+- Double-click on a file tab to rename it
+- Right-click on files in the explorer for additional options
+- Use the command palette (accessible via `Ctrl+P`) to quickly navigate between files
+
 ## 📜 Available Scripts
 
 - `npm run dev` - Start the development server
