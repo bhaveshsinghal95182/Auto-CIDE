@@ -994,6 +994,46 @@ const Project = () => {
     }
   }, [fileTree, webContainer, webContainerStatus, showNotification, mountFilesToWebContainer]);
 
+  // Function to create a new file
+  const createNewFile = useCallback(() => {
+    // Prompt the user for a filename
+    const filename = prompt("Enter the filename (including path if needed):");
+    
+    // Return if the user cancels or enters an empty filename
+    if (!filename || filename.trim() === '') return;
+    
+    // Determine the language based on the file extension
+    const language = detectLanguageFromFilename(filename);
+    
+    // Create a new file object
+    const newFile = {
+      filename: filename.trim(),
+      content: '',
+      language,
+      isSymlink: false,
+      hasUnsavedChanges: true,
+      mountedToWebContainer: false
+    };
+    
+    // Add the file to the file tree
+    setFileTree(prev => [...prev, newFile]);
+    
+    // Open the file in the editor
+    setOpenFiles(prev => {
+      // Check if the file is already open
+      if (prev.some(f => f.filename === newFile.filename)) {
+        return prev;
+      }
+      return [...prev, newFile];
+    });
+    
+    // Set the new file as the current file
+    setCurrentFile(newFile);
+    
+    // Show a notification
+    showNotification(`Created new file: ${newFile.filename}`, 'success');
+  }, [detectLanguageFromFilename, showNotification]);
+
   // Add a function to save file changes that also updates the WebContainer
   const saveFileChanges = useCallback((file) => {
     if (!file || !file.hasUnsavedChanges) return;
@@ -1732,8 +1772,15 @@ const Project = () => {
         {/* Content can be added here */}
         <div className="flex h-full">
           <div className="explorer w-1/5 h-full bg-slate-200">
-            <div className="explorer-header p-2 border-b">
+            <div className="explorer-header p-2 border-b flex justify-between items-center">
               <h1 className="font-bold">File Explorer</h1>
+              <button 
+                className="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center"
+                onClick={createNewFile}
+                title="Create new file"
+              >
+                <i className="ri-add-line"></i>
+              </button>
             </div>
             <div className="explorer-body overflow-y-auto" style={{ maxHeight: 'calc(100vh - 40px)' }}>
               <div className="file-tree p-2">
