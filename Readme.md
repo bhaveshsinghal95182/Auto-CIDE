@@ -110,7 +110,7 @@ docker run -p 3000:3000 -p 5000:5000 auto-cide
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/yourusername/auto-cide.git
+git clone https://github.com/bhaveshsinghal95182/Auto-CIDE.git
 cd auto-cide
 ```
 
@@ -260,5 +260,5 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ---
 
 <p align="center">
-  Made with ❤️ by the Auto-CIDE Team
+  Made with ❤️ by <a href="https://www.bhaveshsinghal.xyz/">Bhavesh</a> and <a href="https://github.com/deepakbhola2604">Deepak</a>
 </p>
