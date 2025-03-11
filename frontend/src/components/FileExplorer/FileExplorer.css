@@ -1,0 +1,40 @@
+/* FileExplorer.css */
+.explorer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.explorer-body {
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.file-tree {
+  padding: 0.5rem;
+}
+
+.directory-item {
+  margin-bottom: 0.25rem;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.file-item:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.file-item .delete-button {
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.file-item:hover .delete-button {
+  opacity: 1;
+} 

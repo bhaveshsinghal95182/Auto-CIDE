@@ -1,0 +1,64 @@
+/* CodeEditor.css */
+.code-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.code-editor-header {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.code-editor-body {
+  flex-grow: 1;
+  overflow: hidden;
+}
+
+.code-editor-content {
+  height: 100%;
+  overflow: auto;
+}
+
+.file-tab {
+  display: inline-block;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  margin: 0 0.25rem;
+  border: 1px solid #1a202c;
+  border-radius: 0.25rem;
+  transition: background-color 0.2s;
+}
+
+.file-tab.active {
+  background-color: #718096;
+  color: white;
+  font-weight: 600;
+}
+
+.file-tab:not(.active) {
+  background-color: #e2e8f0;
+}
+
+.file-tab:not(.active):hover {
+  background-color: #cbd5e0;
+}
+
+.close-button {
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  transition: all 0.2s;
+}
+
+.close-button:hover {
+  color: #f56565;
+  background-color: #fed7d7;
+} 

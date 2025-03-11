@@ -1,0 +1,121 @@
+/* Terminal.css */
+.terminal-container {
+  display: flex;
+  flex-direction: column;
+  background-color: #1a202c;
+  color: white;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 2px solid #4a5568;
+  z-index: 50;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #2d3748;
+  padding: 0.5rem;
+  border-bottom: 1px solid #4a5568;
+}
+
+.terminal-tabs {
+  display: flex;
+  gap: 0.25rem;
+  overflow-x: auto;
+  flex-grow: 1;
+}
+
+.terminal-tab {
+  display: flex;
+  align-items: center;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.25rem 0.25rem 0 0;
+  cursor: pointer;
+}
+
+.terminal-tab.active {
+  background-color: #1a202c;
+  color: white;
+}
+
+.terminal-tab:not(.active) {
+  background-color: #4a5568;
+  color: #e2e8f0;
+}
+
+.terminal-tab:not(.active):hover {
+  background-color: #718096;
+}
+
+.terminal-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.terminal-actions button {
+  padding: 0.25rem;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: #e2e8f0;
+  cursor: pointer;
+}
+
+.terminal-actions button:hover {
+  background-color: #4a5568;
+}
+
+.terminal-output {
+  flex-grow: 1;
+  padding: 0.5rem;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.terminal-line {
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 0.25rem;
+}
+
+.terminal-line.command {
+  color: #90cdf4;
+}
+
+.terminal-line.output {
+  color: #e2e8f0;
+}
+
+.terminal-line.error {
+  color: #fc8181;
+}
+
+.terminal-line.system {
+  color: #68d391;
+}
+
+.terminal-input-container {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem;
+  border-top: 1px solid #4a5568;
+}
+
+.terminal-prompt {
+  color: #68d391;
+  margin-right: 0.5rem;
+  font-weight: bold;
+}
+
+.terminal-input {
+  flex-grow: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: white;
+  font-family: monospace;
+  font-size: 0.875rem;
+} 
