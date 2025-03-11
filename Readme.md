@@ -47,6 +47,27 @@ Before you begin, ensure you have the following installed:
 - [MongoDB](https://www.mongodb.com/) (automatically set up with Docker)
 - [Redis](https://redis.io/) (optional, for enhanced caching)
 
+## Docker Deployment
+
+You can run the entire application (both frontend and backend) using a single Docker container:
+
+### Build the Docker image
+```bash
+docker build -t auto-cide .
+```
+
+### Run the container
+```bash
+docker run -p 3000:3000 -p 5000:5000 auto-cide
+```
+
+This will:
+- Start both frontend and backend services in a single container
+- Make the frontend available at `http://localhost:3000`
+- Make the backend API available at `http://localhost:5000`
+
+> **Note**: Make sure you have Docker installed and running on your machine before executing these commands.
+
 ## Installation
 
 ### 1. Clone the repository
