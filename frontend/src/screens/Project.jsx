@@ -72,6 +72,10 @@ const Project = () => {
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewVisible, setPreviewVisible] = useState(false);
   
+  // New File Modal state
+  const [isNewFileModalOpen, setIsNewFileModalOpen] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
+  
   // Add a ref to store the current fileTree
   const fileTreeRef = useRef([]);
 
@@ -996,18 +1000,25 @@ const Project = () => {
 
   // Function to create a new file
   const createNewFile = useCallback(() => {
-    // Prompt the user for a filename
-    const filename = prompt("Enter the filename (including path if needed):");
-    
-    // Return if the user cancels or enters an empty filename
-    if (!filename || filename.trim() === '') return;
+    // Open the modal instead of showing a prompt
+    setNewFileName('');
+    setIsNewFileModalOpen(true);
+  }, []);
+
+  // Function to handle new file creation from modal
+  const handleCreateNewFile = useCallback(() => {
+    // Return if the filename is empty
+    if (!newFileName || newFileName.trim() === '') {
+      setIsNewFileModalOpen(false);
+      return;
+    }
     
     // Determine the language based on the file extension
-    const language = detectLanguageFromFilename(filename);
+    const language = detectLanguageFromFilename(newFileName);
     
     // Create a new file object
     const newFile = {
-      filename: filename.trim(),
+      filename: newFileName.trim(),
       content: '',
       language,
       isSymlink: false,
@@ -1032,7 +1043,10 @@ const Project = () => {
     
     // Show a notification
     showNotification(`Created new file: ${newFile.filename}`, 'success');
-  }, [detectLanguageFromFilename, showNotification]);
+    
+    // Close the modal
+    setIsNewFileModalOpen(false);
+  }, [newFileName, detectLanguageFromFilename, showNotification]);
 
   // Function to delete a file
   const deleteFile = useCallback((filename, e) => {
@@ -2374,6 +2388,48 @@ const Project = () => {
             >
               Add Collaborators
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* New File Modal */}
+      {isNewFileModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-lg shadow-xl w-96 max-w-full">
+            <h2 className="text-xl font-semibold mb-4">Create New File</h2>
+            <div className="mb-4">
+              <label htmlFor="filename" className="block text-sm font-medium text-gray-700 mb-1">
+                Filename (including path if needed)
+              </label>
+              <input
+                type="text"
+                id="filename"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                value={newFileName}
+                onChange={(e) => setNewFileName(e.target.value)}
+                placeholder="e.g. src/components/Button.jsx"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleCreateNewFile();
+                  }
+                }}
+              />
+            </div>
+            <div className="flex justify-end space-x-3">
+              <button
+                className="px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                onClick={() => setIsNewFileModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                onClick={handleCreateNewFile}
+              >
+                Create
+              </button>
+            </div>
           </div>
         </div>
       )}
