@@ -68,6 +68,13 @@ io.on("connection", async (socket) => {
     }
   });
 
+  // Handle file updates
+  socket.on("file-update", (data) => {
+    console.log(`File update in project ${socket.roomId} by user ${data.userId}: ${data.file.filename}`);
+    // Broadcast to all other users in the same project room
+    socket.broadcast.to(socket.roomId).emit("file-update", data);
+  });
+
   socket.on("disconnect", () => {
     console.log("A user disconnected:", socket.id);
     socket.leave(socket.roomId);

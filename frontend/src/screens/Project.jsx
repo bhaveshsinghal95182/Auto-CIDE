@@ -349,16 +349,89 @@ const Project = () => {
       addMessage(message, "incoming");
     };
 
-    // Register socket event handler
+    // Handle file updates from other users
+    const handleFileUpdate = (data) => {
+      // Skip if this update was triggered by the current user
+      if (data.userId === user._id) return;
+      
+      // Update the file tree
+      setFileTree(prev => {
+        const fileIndex = prev.findIndex(f => f.filename === data.file.filename);
+        if (fileIndex >= 0) {
+          // Update existing file
+          const updatedTree = [...prev];
+          updatedTree[fileIndex] = { 
+            ...updatedTree[fileIndex], 
+            content: data.file.content,
+            _id: data.file._id,
+            // Don't mark as unsaved since it was just saved by another user
+            hasUnsavedChanges: false
+          };
+          return updatedTree;
+        }
+        return prev;
+      });
+      
+      // Update the current file if it's open
+      // Only update if the user doesn't have unsaved changes to avoid overwriting their work
+      if (CurrentFile && CurrentFile.filename === data.file.filename && !CurrentFile.hasUnsavedChanges) {
+        setCurrentFile(prev => ({
+          ...prev,
+          content: data.file.content,
+          _id: data.file._id,
+          hasUnsavedChanges: false
+        }));
+      } else if (CurrentFile && CurrentFile.filename === data.file.filename && CurrentFile.hasUnsavedChanges) {
+        // If the user has unsaved changes, show a notification but don't update their file
+        showNotification(`File ${data.file.filename} was updated by ${data.userName}, but you have unsaved changes. Save your changes or refresh to see the latest version.`, "warning", 8000);
+        return;
+      }
+      
+      // Update in open files list if present
+      setOpenFiles(prev => 
+        prev.map(f => {
+          // Only update if the file doesn't have unsaved changes
+          if (f.filename === data.file.filename && !f.hasUnsavedChanges) {
+            return { ...f, content: data.file.content, _id: data.file._id, hasUnsavedChanges: false };
+          }
+          return f;
+        })
+      );
+      
+      // Update the file in WebContainer if it's initialized
+      if (webContainerStatus === 'initialized' && webContainer && !CurrentFile?.hasUnsavedChanges) {
+        // Create a mini file tree with just this file
+        const singleFileTree = [{
+          filename: data.file.filename,
+          content: data.file.content,
+          mountedToWebContainer: true
+        }];
+        
+        mountFilesToWebContainer(webContainer, singleFileTree)
+          .then(() => {
+            console.log(`File ${data.file.filename} updated in WebContainer from remote update`);
+          })
+          .catch((error) => {
+            console.error(`Error updating file in WebContainer: ${error.message}`);
+          });
+      }
+      
+      // Show notification
+      showNotification(`File ${data.file.filename} was updated by ${data.userName}`, "info");
+    };
+
+    // Register socket event handlers
     if (socketInstance) {
       receiveMessage("project-message", handleProjectMessage);
+      receiveMessage("file-update", handleFileUpdate);
     }
 
     // Cleanup socket connection on unmount
     return () => {
       if (socketInstance) {
-        // Remove the specific event handler
+        // Remove the specific event handlers
         socketInstance.off("project-message", handleProjectMessage);
+        socketInstance.off("file-update", handleFileUpdate);
         socketInstance.disconnect();
       }
     };
@@ -1016,6 +1089,20 @@ const Project = () => {
       
       // Show a save confirmation
       showNotification(`${file.filename} saved successfully!`, 'success');
+      
+      // Emit socket event to notify other users about the file update
+      if (socketInstance) {
+        socketInstance.emit("file-update", {
+          projectId,
+          userId: user._id,
+          userName: user.name || user.email,
+          file: {
+            filename: file.filename,
+            content: file.content,
+            _id: response.data._id
+          }
+        });
+      }
     })
     .catch(error => {
       console.error('Error saving file:', error);
