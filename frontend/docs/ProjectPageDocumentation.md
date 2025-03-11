@@ -12,6 +12,7 @@ This document provides a comprehensive overview of the Project page component in
 6. [UI Components](#ui-components)
 7. [Event Handlers](#event-handlers)
 8. [Hooks and Effects](#hooks-and-effects)
+9. [Recent Additions](#recent-additions)
 
 ## Component Overview
 
@@ -23,6 +24,7 @@ The Project component is the main workspace of the Auto-CIDE application. It pro
 - WebContainer for running and previewing code
 - Terminal integration
 - User management and collaboration
+- File creation and deletion directly from the file explorer
 
 ## State Management
 
@@ -195,24 +197,98 @@ Closes a file tab, with confirmation if there are unsaved changes.
 #### createNewFile
 ```javascript
 const createNewFile = useCallback(() => {
-  // Prompt for filename
-  // Create new file
-  // Add to file tree
-  // Open file
-}, [openFile, fileTree, setFileTree]);
+  // Prompt the user for a filename
+  const filename = prompt("Enter the filename (including path if needed):");
+  
+  // Return if the user cancels or enters an empty filename
+  if (!filename || filename.trim() === '') return;
+  
+  // Determine the language based on the file extension
+  const language = detectLanguageFromFilename(filename);
+  
+  // Create a new file object
+  const newFile = {
+    filename: filename.trim(),
+    content: '',
+    language,
+    isSymlink: false,
+    hasUnsavedChanges: true,
+    mountedToWebContainer: false
+  };
+  
+  // Add the file to the file tree
+  setFileTree(prev => [...prev, newFile]);
+  
+  // Open the file in the editor
+  setOpenFiles(prev => {
+    // Check if the file is already open
+    if (prev.some(f => f.filename === newFile.filename)) {
+      return prev;
+    }
+    return [...prev, newFile];
+  });
+  
+  // Set the new file as the current file
+  setCurrentFile(newFile);
+  
+  // Show a notification
+  showNotification(`Created new file: ${newFile.filename}`, 'success');
+}, [detectLanguageFromFilename, showNotification]);
 ```
-Creates a new file in the project.
+Creates a new file in the project. This function is triggered by clicking the "+" button in the file explorer header.
 
 #### deleteFile
 ```javascript
-const deleteFile = useCallback((filename) => {
+const deleteFile = useCallback((filename, e) => {
+  // Stop event propagation to prevent opening the file when clicking delete
+  if (e) {
+    e.stopPropagation();
+  }
+  
   // Confirm deletion
-  // Delete from backend
-  // Update file tree
-  // Close file if open
-}, [projectId, handleCloseFile, showNotification]);
+  const confirmDelete = window.confirm(`Are you sure you want to delete ${filename}?`);
+  if (!confirmDelete) return;
+  
+  // Find the file in the file tree
+  const fileToDelete = fileTree.find(f => f.filename === filename);
+  if (!fileToDelete) {
+    showNotification(`File ${filename} not found`, 'error');
+    return;
+  }
+  
+  // If the file has an ID (saved to backend), delete it from the backend
+  if (fileToDelete._id) {
+    axios.delete(`/filetree/${projectId}/${fileToDelete._id}`)
+      .then(() => {
+        // Show success notification
+        showNotification(`File ${filename} deleted successfully`, 'success');
+        
+        // Remove from file tree
+        setFileTree(prev => prev.filter(f => f.filename !== filename));
+        
+        // Close the file if it's open
+        if (openFiles.some(f => f.filename === filename)) {
+          handleCloseFile(filename);
+        }
+      })
+      .catch(error => {
+        console.error('Error deleting file:', error);
+        showNotification(`Error deleting file: ${error.message}`, 'error');
+      });
+  } else {
+    // If the file is not saved to backend yet, just remove it from the UI
+    setFileTree(prev => prev.filter(f => f.filename !== filename));
+    
+    // Close the file if it's open
+    if (openFiles.some(f => f.filename === filename)) {
+      handleCloseFile(filename);
+    }
+    
+    showNotification(`File ${filename} removed`, 'success');
+  }
+}, [fileTree, projectId, openFiles, handleCloseFile, showNotification]);
 ```
-Deletes a file from the project.
+Deletes a file from the project. This function is triggered by clicking the delete button in the file item.
 
 ## WebContainer Integration
 
@@ -287,6 +363,50 @@ const renderDirectory = (dir, path = '', level = 0) => {
 };
 ```
 Renders the hierarchical file tree with context menu options.
+
+#### File Explorer Header
+```javascript
+<div className="explorer-header p-2 border-b flex justify-between items-center">
+  <h1 className="font-bold">File Explorer</h1>
+  <button 
+    className="bg-blue-500 hover:bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center"
+    onClick={createNewFile}
+    title="Create new file"
+  >
+    <i className="ri-add-line"></i>
+  </button>
+</div>
+```
+The file explorer header contains a title and a "+" button for creating new files.
+
+#### File Item
+```javascript
+<div 
+  key={currentPath}
+  className="file-item flex items-center py-1 hover:bg-slate-300 cursor-pointer group"
+  style={{ paddingLeft: `${paddingLeft}px` }}
+  onClick={() => {
+    // Open file logic
+  }}
+>
+  <i className="ri-file-fill mr-1 text-blue-600"></i>
+  <span className="text-sm">{name}</span>
+  <div className="flex-grow"></div>
+  {/* Delete button */}
+  <button
+    type="button"
+    className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+    onClick={(e) => {
+      e.stopPropagation();
+      deleteFile(item.data.filename, e);
+    }}
+    title="Delete file"
+  >
+    <i className="ri-delete-bin-line"></i>
+  </button>
+</div>
+```
+Each file item in the file explorer includes a delete button that appears on hover.
 
 ### Chat
 ```javascript
@@ -415,6 +535,16 @@ useEffect(() => {
 }, [openFiles, saveFile]);
 ```
 Automatically saves files at regular intervals.
+
+## Recent Additions
+
+### File Creation Button
+A "+" button has been added to the file explorer header to allow users to quickly create new files. When clicked, it prompts the user to enter a filename (including path if needed) and creates an empty file with that name. The file is automatically opened in the editor for editing.
+
+### File Deletion Button
+Each file item in the file explorer now includes a delete button that appears when hovering over the file. When clicked, it prompts the user to confirm the deletion and then removes the file from both the UI and the backend (if it was already saved). This provides a convenient way to manage files directly from the file explorer.
+
+These additions enhance the user experience by providing intuitive ways to manage files without having to use external tools or commands. The visual feedback (notifications) keeps users informed about the result of their actions, and the confirmation dialogs help prevent accidental deletions.
 
 ## Conclusion
 

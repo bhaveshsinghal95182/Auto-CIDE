@@ -1034,6 +1034,56 @@ const Project = () => {
     showNotification(`Created new file: ${newFile.filename}`, 'success');
   }, [detectLanguageFromFilename, showNotification]);
 
+  // Function to delete a file
+  const deleteFile = useCallback((filename, e) => {
+    // Stop event propagation to prevent opening the file when clicking delete
+    if (e) {
+      e.stopPropagation();
+    }
+    
+    // Confirm deletion
+    const confirmDelete = window.confirm(`Are you sure you want to delete ${filename}?`);
+    if (!confirmDelete) return;
+    
+    // Find the file in the file tree
+    const fileToDelete = fileTree.find(f => f.filename === filename);
+    if (!fileToDelete) {
+      showNotification(`File ${filename} not found`, 'error');
+      return;
+    }
+    
+    // If the file has an ID (saved to backend), delete it from the backend
+    if (fileToDelete._id) {
+      axios.delete(`/filetree/${projectId}/${fileToDelete._id}`)
+        .then(() => {
+          // Show success notification
+          showNotification(`File ${filename} deleted successfully`, 'success');
+          
+          // Remove from file tree
+          setFileTree(prev => prev.filter(f => f.filename !== filename));
+          
+          // Close the file if it's open
+          if (openFiles.some(f => f.filename === filename)) {
+            handleCloseFile(filename);
+          }
+        })
+        .catch(error => {
+          console.error('Error deleting file:', error);
+          showNotification(`Error deleting file: ${error.message}`, 'error');
+        });
+    } else {
+      // If the file is not saved to backend yet, just remove it from the UI
+      setFileTree(prev => prev.filter(f => f.filename !== filename));
+      
+      // Close the file if it's open
+      if (openFiles.some(f => f.filename === filename)) {
+        handleCloseFile(filename);
+      }
+      
+      showNotification(`File ${filename} removed`, 'success');
+    }
+  }, [fileTree, projectId, openFiles, handleCloseFile, showNotification]);
+
   // Add a function to save file changes that also updates the WebContainer
   const saveFileChanges = useCallback((file) => {
     if (!file || !file.hasUnsavedChanges) return;
@@ -1841,9 +1891,9 @@ const Project = () => {
                             return (
                               <div 
                                 key={currentPath}
-                                className="file-item flex items-center py-1 hover:bg-slate-300 cursor-pointer"
+                                className="file-item flex items-center py-1 hover:bg-slate-300 cursor-pointer group"
                                 style={{ paddingLeft: `${paddingLeft}px` }}
-                    onClick={() => {
+                                onClick={() => {
                                   // Check if the file already exists in the file tree
                                   const existingFile = fileTree.find(f => f.filename === item.data.filename);
                                   
@@ -1881,7 +1931,20 @@ const Project = () => {
                                   <i className="ri-file-fill mr-1 text-blue-600"></i>
                                 )}
                                 <span className="text-sm">{name}</span>
-              </div>
+                                <div className="flex-grow"></div>
+                                {/* Delete button */}
+                                <button
+                                  type="button"
+                                  className="text-red-500 hover:text-red-700 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deleteFile(item.data.filename, e);
+                                  }}
+                                  title="Delete file"
+                                >
+                                  <i className="ri-delete-bin-line"></i>
+                                </button>
+                              </div>
                             );
                           }
                           return null;
