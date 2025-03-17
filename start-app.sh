@@ -33,7 +33,6 @@ if [ "$(docker-compose ps -q | wc -l)" -gt 0 ]; then
     echo ""
     echo "========================================"
     echo "  Auto-CIDE is now running!"
-    echo "  Frontend: http://localhost:3000"
     echo "  Backend API: http://localhost:5000"
     echo "========================================"
     echo ""
