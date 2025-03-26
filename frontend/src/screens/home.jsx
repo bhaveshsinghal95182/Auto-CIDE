@@ -37,25 +37,37 @@ const Home = () => {
   const navigate = useNavigate();
 
   return (
-    <main className="p-4">
-      <div className="projects flex flex-wrap gap-4">
+    <main className="p-8 max-w-7xl mx-auto">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-800 mb-2">My Projects</h1>
+        <p className="text-gray-600">Create and manage your coding projects</p>
+      </div>
+
+      <div className="projects grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         <button
           onClick={handleModalOpen}
-          className="project p-4 border border-slate-300 rounded-md"
+          className="project p-6 border-2 border-dashed border-gray-300 rounded-xl bg-white hover:border-blue-500 hover:bg-blue-50 transition-all duration-300 flex flex-col items-center justify-center gap-3 group"
         >
-          New Project
-          <i className="ri-link ml-2"></i>
+          <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center group-hover:bg-blue-200 transition-colors duration-300">
+            <i className="ri-add-line text-2xl text-blue-600"></i>
+          </div>
+          <span className="text-lg font-medium text-gray-700 group-hover:text-blue-600 transition-colors duration-300">New Project</span>
         </button>
 
         {project.map((project) => (
           <div key={project._id}
             onClick={() => navigate(`/project`, { state: project })}
-            className="project p-4 border border-slate-300 flex flex-col gap-2 rounded-md cursor-pointer hover:bg-slate-100 min-w-[200px]"
+            className="project p-6 border border-gray-200 rounded-xl bg-white hover:shadow-lg hover:border-blue-200 transition-all duration-300 cursor-pointer group"
           >
-            <h2 className="text-lg font-semibold">{project.name}</h2>
-            <div className="flex justify-between items-center gap-2">
-              <i className="ri-user-fill"></i>
-              <p className="text-sm text-gray-500">{project.users.length} members</p>
+            <div className="flex items-start justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-800 group-hover:text-blue-600 transition-colors duration-300">{project.name}</h2>
+              <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                <i className="ri-folder-fill text-xl text-gray-600"></i>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 text-gray-600">
+              <i className="ri-team-fill"></i>
+              <p className="text-sm">{project.users.length} members</p>
             </div>
           </div>
         ))}
@@ -63,12 +75,20 @@ const Home = () => {
 
       {/* Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white rounded-lg p-6 w-96">
-            <h2 className="text-xl font-semibold mb-4">Create New Project</h2>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-white rounded-2xl p-8 w-[480px] shadow-xl transform transition-all">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">Create New Project</h2>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors duration-200"
+              >
+                <i className="ri-close-line text-2xl"></i>
+              </button>
+            </div>
 
             <form onSubmit={handleCreateProject}>
-              <div className="mb-4">
+              <div className="mb-6">
                 <label
                   htmlFor="projectName"
                   className="block text-sm font-medium text-gray-700 mb-2"
@@ -80,23 +100,23 @@ const Home = () => {
                   id="projectName"
                   value={projectName}
                   onChange={(e) => setProjectName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
                   placeholder="Enter project name"
                   required
                 />
               </div>
 
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-3">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200"
+                  className="px-6 py-2.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors duration-200"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
+                  className="px-6 py-2.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors duration-200"
                 >
                   Create Project
                 </button>
