@@ -11,8 +11,10 @@ services:
     environment:
       - NODE_ENV=production
       - MONGODB_URI=mongodb://mongodb:27017/auto-cide
+      - REDIS_URL=redis://redis:6379
     depends_on:
       - mongodb
+      - redis
     restart: unless-stopped
 
   mongodb:
@@ -23,6 +25,12 @@ services:
       - mongodb_data:/data/db
     restart: unless-stopped
 
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+
 volumes:
   mongodb_data:
-    driver: local 
+    driver: local
